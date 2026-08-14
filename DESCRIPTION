@@ -1,0 +1,14 @@
+Package: trend.sst
+Title: Daily SST Sufficient Statistics on S2 Cells
+Version: 0.0.1
+Authors@R: person("Michael", "Sumner", email = "mdsumner@gmail.com",
+    role = c("aut", "cre"))
+Description: Area-weighted daily sea surface temperature aggregated to a
+    global S2 discrete grid as sufficient statistics (count, summed
+    weights, weighted sums and sums of squares), from OISST and GHRSST
+    MUR sources. Any region is a cell selection; any mean, variance, or
+    rollup is exact arithmetic on the sums.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports: s2, vapour, vaster, arrow, dplyr
+Suggests: sds, mirai

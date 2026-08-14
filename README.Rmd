@@ -1,0 +1,124 @@
+---
+output: github_document
+---
+
+# trend.sst
+
+Daily sea surface temperature aggregated to a global S2 discrete grid
+(level 5, ~290 km cells) as *sufficient statistics*: per (cell, date) we
+store `n` (valid pixels), `sumw` (summed cos-latitude weights), `sumwx`,
+and `sumwx2`. Sums are associative, so any union of cells over any dates
+aggregates exactly: every region is a cell selection, every mean,
+variance, or hierarchical rollup is arithmetic on the sums. No geometry
+happens at daily-run time; all of it lives in a one-off pixel-to-cell
+mapping per source grid.
+
+Sources: OISST v2.1 (0.25 degree, 1981-09 onward) and GHRSST MUR
+(0.01 degree, 2002-06 onward). Same schema, same registry, never pooled
+(`sums/oisst/`, `sums/ghrsst/`).
+
+Design notes that the code depends on:
+
+* S2 cell ids cross the R boundary as **character tokens**, never bare
+  `s2_cell` doubles: NaN-payload ids (top of face 3, i.e. the Pacific)
+  collapse under base double semantics in `duplicated()`, `match()`,
+  `%in%`. Same-level tokens share a length so character sort equals id
+  sort.
+* The mapping is **dense and positional**: element i of a band read is
+  pixel i, nothing stores pixel identity. `meta.rds` stamps the grid
+  signature and `check_mapping()` hard-stops on mismatch.
+* NA pixels contribute nothing via the `fin` guard, so the dense mapping
+  is correct without culling; culling is a later optimization, not a
+  correctness feature.
+
+## Task map
+
+Each step is small and checkable; run in order, OISST first (the whole
+OISST path takes minutes and exercises every code path GHRSST will use).
+
+### 0. Repo hygiene
+
+- [ ] `devtools::load_all()` runs clean
+- [ ] `data-raw/oisstfiles.R`: rebuild the catalog **without projwin**
+      (full grid is the product) -> `oisstfiles.parquet`
+
+### 1. Registry (once, source-independent)
+
+- [ ] `registry <- build_registry(5L)`; expect 6144 rows
+- [ ] `arrow::write_parquet(registry, "s2_registry.parquet")`
+- [ ] sanity: `anyDuplicated(registry$cell) == 0`,
+      `all(diff(order(registry$cell)) == 1)` (already sorted)
+
+### 2. OISST mapping (seconds)
+
+- [ ] `src <- oisst_source("oisstfiles.parquet")`; check
+      `src$grid$dimension` is 1440 x 720 and extent is 0..360, -90..90
+- [ ] `build_mapping(src, registry, band_rows = 720L)`
+- [ ] `check_mapping(src)` passes
+
+### 3. One-date end-to-end check (the important gate)
+
+- [ ] `accumulate_date(src$files$dsn[i], src$files$date[i], src, registry)`
+      for one recent date
+- [ ] read the parquet back: values sane (Celsius range, land absent)
+- [ ] **cross-check**: `sum(sumwx)/sum(sumw)` over all cells equals a
+      directly computed cos-weighted global mean of the same file
+      (xarray or tidync one-liner) to several decimals
+- [ ] orientation check: pick one cell token near a known feature
+      (e.g. equatorial cold tongue), confirm its mean is plausible --
+      guards against a silent north/south flip
+
+### 4. OISST backfill (minutes to an hour, resumable)
+
+- [ ] run `data-raw/backfill_oisst.R`; rerun-to-resume semantics, FAIL
+      dates just retry next run
+- [ ] gap check on completion: `diff(sort(unique(date)))` in the sums
+
+### 5. First science: the ClimateReanalyzer reproduction
+
+- [ ] `cells_latband(registry, -60, 60)` -> `series_stats()` -> plot
+- [ ] `validate/compare_cr.R`: cell series vs bracket (straddling ring
+      in/out) vs pixel-exact projwin clip on ~200 sampled dates
+- [ ] expectations to test: exact value inside the bracket; cell-minus-
+      exact small (order 0.01-0.05 C), **stationary** (no trend), with a
+      seasonal wiggle. This figure is the quantitative license for
+      preferring generic cells over bespoke clips.
+
+### 6. GHRSST on Setonix
+
+- [ ] `ghrsst_source()`; grid check 36000 x 17999
+- [ ] `build_mapping(src, registry, band_rows = 512L)` -- bands align to
+      COG tile rows; ~8 GB dense uncompressed, use `compress = "gzip"`
+      in saveRDS if scratch quota is tight
+- [ ] missing-pixel constancy test (sample dates across seasons/eras,
+      compare `is.finite` patterns) -- informs the optional cull, does
+      not block anything
+- [ ] backfill runner: `accumulate_date` over dates with mirai daemons
+      (few fat workers, each looping bands within its date; a whole date
+      is ~5 GB so 96 whole-date workers will not fit), sbatch wrapper as
+      per the warp pipeline
+- [ ] known-bad dates from the warp series (2025-08-24..29 input-starved
+      analysis, 2003-11 pair) should reappear here; leave them in the
+      sums, flag at query time
+
+### 7. Downstream (in any order)
+
+- [ ] OISST vs GHRSST product comparison over the 2002+ overlap: join on
+      (cell, date) -- arguably the most novel output of the framework
+- [ ] Pacific series re-derived as a cell selection (retire the NE-mask
+      warp pipeline or keep as another validation oracle)
+- [ ] per-cell trend/anomaly maps from `cell_means()` baselines
+- [ ] analysis-quality trace: spatial roughness per date to detect
+      input-starved analyses (needs a fifth statistic; schema additions
+      are cheap while the record is one rerun away)
+
+## Layout
+
+```
+R/                 cells.R sources.R mapping.R accumulate.R series.R
+data-raw/          oisstfiles.R backfill_oisst.R
+validate/          compare_cr.R   (the old warp trick, demoted to oracle)
+s2_registry.parquet
+mapping/<source>/  band_%04i.rds + meta.rds   (not in git for ghrsst)
+sums/<source>/     YYYY-MM-DD.parquet         (the product; on Acacia)
+```
