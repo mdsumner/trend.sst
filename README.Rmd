@@ -114,11 +114,25 @@ OISST path takes minutes and exercises every code path GHRSST will use).
 
 ## Layout
 
+Git holds recipes; the bucket holds artifacts; scratch holds nothing
+that cannot die (restore by rclone, or rebuild: OISST seconds, GHRSST
+~30 min, both stamped by meta.rds and validated by check_mapping()).
+
 ```
 R/                 cells.R sources.R mapping.R accumulate.R series.R
-data-raw/          oisstfiles.R backfill_oisst.R
-validate/          compare_cr.R   (the old warp trick, demoted to oracle)
-s2_registry.parquet
-mapping/<source>/  band_%04i.rds + meta.rds   (not in git for ghrsst)
-sums/<source>/     YYYY-MM-DD.parquet         (the product; on Acacia)
+data-raw/          oisstfiles.R backfill_oisst.R backfill_ghrsst.R .sh
+validate/          compare_cr.R runcalc.R + the retired warp pipeline
+                   (ghrsst_pacific_sst.R/.sh/.csv, doy plot) as oracles
+s2_registry.parquet oisstfiles.parquet     [committed: tiny, stable]
+mapping/<source>/  sums/<source>/          [gitignored; home is Acacia]
 ```
+
+Bucket mirrors the tree; sums on S3 are the queryable product
+(arrow/duckdb over acacia:trend-sst/sums/<source>/ needs no Setonix):
+
+```
+rclone sync mapping/ acacia:trend-sst/mapping/   # after a build
+rclone sync sums/ acacia:trend-sst/sums/         # after a backfill
+rclone copy acacia:trend-sst/mapping/ mapping/   # restore after purge
+```
+
