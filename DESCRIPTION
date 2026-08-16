@@ -12,3 +12,4 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Imports: s2, vapour, vaster, arrow, dplyr
 Suggests: sds, mirai
+Config/roxygen2/version: 8.1.0
