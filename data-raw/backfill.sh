@@ -30,5 +30,10 @@ cd "$SLURM_SUBMIT_DIR"
 $RUN Rscript data-raw/backfill.R
 
 ## the bucket is the artifact's home; sync is part of the run, not a chore
-rclone sync sums/ pawsey1197:aad-derived/trend-sst/sums/
-rclone sync mapping/ pawsey1197:aad-derived/trend-sst/mapping/
+#rclone sync sums/ pawsey1197:aad-derived/trend-sst/sums/
+#rclone sync mapping/ pawsey1197:aad-derived/trend-sst/mapping/
+
+rclone copy --checksum sums/ pawsey1197:aad-derived/trend-sst/sums/ \
+  || echo "WARNING: sums copy FAILED" >&2
+rclone copy --checksum mapping/ pawsey1197:aad-derived/trend-sst/mapping/ \
+  || echo "WARNING: mapping copy FAILED" >&2
