@@ -27,6 +27,11 @@ RUN="singularity exec $MYSOFTWARE/sif_lib/gdal-r-python-extras_latest.sif"
 export R_LIBS_USER=${R_LIBS_USER:-$MYSOFTWARE/r-lib}
 
 cd "$SLURM_SUBMIT_DIR"
+if [[ "$SST_SOURCE" == "oisst" ]]; then
+    echo "The source is oisst"
+    $RUN Rscript data-raw/oisstfiles.R
+fi
+
 $RUN Rscript data-raw/backfill.R
 
 ## the bucket is the artifact's home; sync is part of the run, not a chore
