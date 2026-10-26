@@ -17,6 +17,13 @@ accumulate_date <- function(dsn, date, source, registry,
                 dimnames = list(NULL, c("n", "sumw", "sumwx", "sumwx2")))
 
   vapour::vapour_set_config("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
+  ## a hung network read must become a caught error, never a stalled
+  ## worker: two multi-hour whole-job stalls traced to reads with no
+  ## timeout (2026-08 at 92 workers, 2026-10 at 42)
+  vapour::vapour_set_config("GDAL_HTTP_CONNECTTIMEOUT", "30")
+  vapour::vapour_set_config("GDAL_HTTP_TIMEOUT", "120")
+  vapour::vapour_set_config("GDAL_HTTP_MAX_RETRY", "3")
+  vapour::vapour_set_config("GDAL_HTTP_RETRY_DELAY", "5")
   for (b in seq_len(meta$n_bands)) {
     m <- readRDS(file.path(mapping_path, sprintf("band_%04i.rds", b)))
     v <- read_rows(dsn, m$rows, source$grid)

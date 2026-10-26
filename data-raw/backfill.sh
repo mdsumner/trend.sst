@@ -18,7 +18,7 @@ export SST_WORKERS=${SST_WORKERS:-64}
 
 module load rclone/1.68.1
 module load singularity/4.1.0-slurm
-RUN="singularity exec $MYSOFTWARE/sif_lib/gdal-r-python-extras_latest.sif"
+RUN="singularity exec $MYSOFTWARE/sif_lib/gdal-r-python-extras_2026-10-25.sif"
 
 ## trend.sst must be installed where the container's R can see it, e.g.
 ## once, interactively:
