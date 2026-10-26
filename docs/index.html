@@ -163,21 +163,33 @@ function build(status, series) {
       <span class="seg" id="viewseg">
         <button data-v="time" class="on">Time</button>
         <button data-v="doy">Day of year</button></span>
-      <label>Region <select id="regsel">
-        <option value="cr" selected>60S-60N</option>
-        <option value="global">Global</option></select></label>
+      <label>Region <select id="regsel"></select></label>
       <label id="srcwrap" style="display:none">Source <select id="srcsel"></select></label>
     </div>
     <svg id="chart"></svg>
     <div class="legend" id="chartleg"></div>`;
   el.appendChild(sec2);
 
-  const state = { view: "time", region: "cr", src: names[0] };
+  const state = { view: "time", region: "cr",
+                  src: names.length > 1 ? "both" : names[0] };
   const srcsel = $("#srcsel");
+  if (names.length > 1) {
+    const o = document.createElement("option");
+    o.value = "both"; o.textContent = "Both"; srcsel.appendChild(o);
+  }
   for (const nm of names) {
     const o = document.createElement("option");
     o.value = nm; o.textContent = SRC[nm]?.label || nm; srcsel.appendChild(o);
   }
+  srcsel.value = state.src;
+  const REGIONS = series.regions || { cr: "60S-60N", global: "Global" };
+  if (!(state.region in REGIONS)) state.region = Object.keys(REGIONS)[0];
+  const regsel = $("#regsel");
+  for (const [k, lab] of Object.entries(REGIONS)) {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = lab; regsel.appendChild(o);
+  }
+  regsel.value = state.region;
   $("#viewseg").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     state.view = b.dataset.v;
@@ -261,18 +273,27 @@ function build(status, series) {
   }
 
   function drawDoy(svg, w, h, m, leg) {
-    const s = series.sources[state.src];
-    const col = css(SRC[state.src].col);
-    const byYear = d3.group(s.dates.map((d, i) => ({ d, v: s[state.region][i] }))
-      .filter(p => p.v != null)
-      .map(p => ({ y: +p.d.slice(0, 4),
-                   doy: d3.timeDay.count(new Date(+p.d.slice(0, 4), 0, 1), new Date(p.d)) + 1,
-                   v: p.v })), p => p.y);
-    const yrs = [...byYear.keys()].sort(d3.ascending);
-    const cur = yrs[yrs.length - 1];
+    // "Both": the longer record (OISST) supplies the gray climatological
+    // backdrop; the current year is drawn once per source in its color,
+    // so the products are compared on the same day axis and context.
+    const srcs = state.src === "both" ? names : [state.src];
+    const ghostSrc = srcs.includes("oisst") ? "oisst" : srcs[0];
+    const toDoy = nm => {
+      const s = series.sources[nm];
+      return d3.group(s.dates.map((d, i) => ({ d, v: s[state.region][i] }))
+        .filter(p => p.v != null)
+        .map(p => ({ y: +p.d.slice(0, 4),
+                     doy: d3.timeDay.count(new Date(+p.d.slice(0, 4), 0, 1), new Date(p.d)) + 1,
+                     v: p.v })), p => p.y);
+    };
+    const byYear = Object.fromEntries(srcs.map(nm => [nm, toDoy(nm)]));
+    const ghosts = byYear[ghostSrc];
+    const yrs = [...ghosts.keys()].sort(d3.ascending);
+    const cur = d3.max(srcs.flatMap(nm => [...byYear[nm].keys()]));
+    const allPts = srcs.flatMap(nm => [...byYear[nm].values()].flat());
     const x = d3.scaleLinear().domain([1, 366]).range([m.l, w - m.r]);
     const y = d3.scaleLinear()
-      .domain(d3.extent([...byYear.values()].flat(), p => p.v)).nice()
+      .domain(d3.extent(allPts, p => p.v)).nice()
       .range([h - m.b, m.t]);
     svg.append("g").attr("transform", `translate(0,${h - m.b})`)
       .call(d3.axisBottom(x).tickValues([1, 60, 121, 182, 244, 305])
@@ -283,42 +304,57 @@ function build(status, series) {
       .call(axisify).call(g => g.selectAll(".tick line").attr("opacity", .5));
     const line = d3.line().x(p => x(p.doy)).y(p => y(p.v));
     for (const yr of yrs) if (yr !== cur) {
-      svg.append("path").attr("d", line(byYear.get(yr))).attr("fill", "none")
+      svg.append("path").attr("d", line(ghosts.get(yr))).attr("fill", "none")
         .attr("stroke", css("--text-muted")).attr("stroke-opacity", .35)
         .attr("stroke-width", 1).attr("data-year", yr).attr("class", "ghost");
     }
-    const curPts = byYear.get(cur);
-    svg.append("path").attr("d", line(curPts)).attr("fill", "none")
-      .attr("stroke", col).attr("stroke-width", 2.2);
-    const lastP = curPts[curPts.length - 1];
-    svg.append("text").attr("x", x(lastP.doy) + 6).attr("y", y(lastP.v))
-      .attr("dominant-baseline", "middle").attr("font-size", 12)
-      .attr("font-weight", 650).attr("fill", col).text(cur);
-    leg.innerHTML = `<span><span class="sw" style="background:${col}"></span>${cur}</span>
-      <span><span class="sw" style="background:${css("--text-muted")};opacity:.5"></span>
-      ${yrs[0]}-${cur - 1}</span>`;
+    leg.innerHTML = "";
+    srcs.forEach((nm, j) => {
+      const pts = byYear[nm].get(cur);
+      if (!pts || !pts.length) return;
+      const col = css(SRC[nm].col);
+      svg.append("path").attr("d", line(pts)).attr("fill", "none")
+        .attr("stroke", col).attr("stroke-width", 2.2);
+      const lastP = pts[pts.length - 1];
+      svg.append("text").attr("x", x(lastP.doy) + 6)
+        .attr("y", y(lastP.v) + (srcs.length > 1 ? (j ? 12 : -6) : 0))
+        .attr("dominant-baseline", "middle").attr("font-size", 12)
+        .attr("font-weight", 650).attr("fill", col)
+        .text(srcs.length > 1 ? `${cur} ${SRC[nm].label}` : cur);
+      leg.insertAdjacentHTML("beforeend",
+        `<span><span class="sw" style="background:${col}"></span>${cur} ${SRC[nm].label}</span>`);
+    });
+    leg.insertAdjacentHTML("beforeend",
+      `<span><span class="sw" style="background:${css("--text-muted")};opacity:.5"></span>
+      ${yrs[0]}-${cur - 1} (${SRC[ghostSrc].label})</span>`);
     svg.append("rect").attr("x", m.l).attr("y", m.t)
       .attr("width", w - m.l - m.r).attr("height", h - m.t - m.b)
       .attr("fill", "transparent")
       .on("mousemove", ev => {
         const [px, py] = d3.pointer(ev);
         const doy = Math.round(x.invert(px));
+        const cands = [];
+        for (const yr of yrs) if (yr !== cur)
+          cands.push({ lbl: `${yr}`, ghost: yr, arr: ghosts.get(yr) });
+        for (const nm of srcs) {
+          const arr = byYear[nm].get(cur);
+          if (arr) cands.push({ lbl: `${cur} ${SRC[nm].label}`, arr });
+        }
         let best = null;
-        for (const yr of yrs) {
-          const arr = byYear.get(yr);
-          const i = d3.bisector(p => p.doy).center(arr, doy);
-          const p = arr[i];
+        for (const c of cands) {
+          const i = d3.bisector(p => p.doy).center(c.arr, doy);
+          const p = c.arr[i];
           if (p && (!best || Math.abs(y(p.v) - py) < Math.abs(y(best.p.v) - py)))
-            best = { yr, p };
+            best = { ...c, p };
         }
         svg.selectAll(".ghost").attr("stroke", css("--text-muted"))
           .attr("stroke-opacity", .35).attr("stroke-width", 1);
         if (best) {
-          if (best.yr !== cur)
-            svg.selectAll(`.ghost[data-year="${best.yr}"]`)
+          if (best.ghost)
+            svg.selectAll(`.ghost[data-year="${best.ghost}"]`)
               .attr("stroke", css("--text-secondary")).attr("stroke-opacity", .9)
               .attr("stroke-width", 1.6);
-          showTip(`<b>${best.yr}</b> day ${best.p.doy}<br>${best.p.v.toFixed(2)} C`,
+          showTip(`<b>${best.lbl}</b> day ${best.p.doy}<br>${best.p.v.toFixed(2)} C`,
                   ev.clientX, ev.clientY);
         }
       })

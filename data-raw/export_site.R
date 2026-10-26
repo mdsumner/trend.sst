@@ -43,18 +43,37 @@ jsonlite::write_json(status, file.path(out, "status.json"),
 message("status.json written")
 
 ## ---------------------------------------------------------------- series
-cr_cells <- cells_latband(reg, -60, 60)
+## every region is a cell selection; add one by naming it here
+region_cells <- list(
+  cr = cells_latband(reg, -60, 60),
+  global = NULL,
+  nh = cells_latband(reg, 0, 90),
+  sh = cells_latband(reg, -90, 0),
+  tropics = cells_latband(reg, -23.4, 23.4),
+  so60 = cells_latband(reg, -90, -60),
+  nino34 = reg$cell[reg$lat > -5 & reg$lat < 5 &
+                    reg$lon > -170 & reg$lon < -120])
+region_labels <- list(
+  cr = "60S-60N", global = "Global",
+  nh = "N hemisphere", sh = "S hemisphere",
+  tropics = "Tropics 23S-23N", so60 = "South of 60S",
+  nino34 = "Nino 3.4")
+
 rnd <- function(x) round(x, 3)
 series <- lapply(paths, function(p) {
   g <- series_stats(p)
-  c <- series_stats(p, cr_cells)
-  list(dates = iso(g$date), global = rnd(g$mean),
-       cr = rnd(c$mean[match(g$date, c$date)]))
+  out <- list(dates = iso(g$date))
+  for (nm in names(region_cells)) {
+    s <- if (is.null(region_cells[[nm]])) g
+         else series_stats(p, region_cells[[nm]])
+    out[[nm]] <- rnd(s$mean[match(g$date, s$date)])
+  }
+  out
 })
-jsonlite::write_json(list(sources = series),
+jsonlite::write_json(list(regions = region_labels, sources = series),
                      file.path(out, "series.json"),
                      auto_unbox = TRUE, digits = NA, na = "null")
-message("series.json written")
+message(sprintf("series.json written (%i regions)", length(region_labels)))
 
 ## ------------------------------------------------- cells (OISST, warm-up)
 p <- paths$oisst
