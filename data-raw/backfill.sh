@@ -42,3 +42,9 @@ rclone copy --checksum sums/ pawsey1197:aad-derived/trend-sst/sums/ \
   || echo "WARNING: sums copy FAILED" >&2
 rclone copy --checksum mapping/ pawsey1197:aad-derived/trend-sst/mapping/ \
   || echo "WARNING: mapping copy FAILED" >&2
+
+## bucket-truth manifest for the Pages mechanics view: written by the
+## machine that writes the bucket, after the sums push
+$RUN Rscript data-raw/write_manifest.R . \
+  && rclone copy manifest.json pawsey1197:aad-derived/trend-sst/ \
+  || echo "WARNING: manifest FAILED" >&2

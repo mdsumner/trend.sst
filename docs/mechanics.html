@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trend.sst - mechanics</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f0efec;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
+    --series-1: #2a78d6; --grid: #e4e3de; --border: #d8d7d0;
+    --status-good: #0ca30c; --status-warning: #fab219;
+    --status-serious: #ec835a; --status-critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
+      --series-1: #3987e5; --grid: #32322f; --border: #3d3d39;
+    }
+  }
+  html, body { margin: 0; }
+  .viz-root { background: var(--surface-1); color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; padding: 20px 24px 48px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; }
+  nav a { color: var(--series-1); text-decoration: none; font-size: 13px;
+          margin-right: 12px; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 2px 0 20px; }
+  h2 { font-size: 15px; font-weight: 650; margin: 26px 0 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px;
+    font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 12px 6px 0; vertical-align: top;
+    border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12px;
+    letter-spacing: .03em; text-transform: uppercase; }
+  td.mono, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .muted { color: var(--text-muted); }
+  .sec { color: var(--text-secondary); }
+  a { color: var(--series-1); }
+  .err { background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; color: var(--text-secondary);
+    font-size: 13px; margin: 8px 0; }
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 36px; }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+<header>
+  <h1>trend.sst mechanics</h1>
+  <nav><a href="index.html">store status</a><a href="map.html">cell explorer</a></nav>
+</header>
+<p class="sub">The pipeline ledger: what the bucket actually holds
+(<span class="mono">manifest.json</span>, written by the backfill host at push
+time, fetched live) contrasted with what this site was built from
+(<span class="mono">data/status.json</span>, baked at export time).</p>
+
+<div id="out">Loading...</div>
+
+<footer>Bucket: <a id="bucketlink" class="mono"
+  href="https://projects.pawsey.org.au/aad-derived/trend-sst/manifest.json">aad-derived/trend-sst</a>
+&middot; sums are per-date parquet of (cell, n, sumw, sumwx, sumwx2) on
+S2 level-5 cells.</footer>
+</div></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const BUCKET = "https://projects.pawsey.org.au/aad-derived/trend-sst";
+const SITE_FILES = ["status.json", "series.json", "cells.json", "monthly.bin"];
+const fmtB = b => b == null ? "-"
+  : b > 1e9 ? (b / 1e9).toFixed(2) + " GB"
+  : b > 1e6 ? (b / 1e6).toFixed(1) + " MB"
+  : Math.round(b / 1e3) + " kB";
+const dayDiff = (a, b) => Math.round((new Date(a) - new Date(b)) / 864e5);
+const chip = (cls, label) =>
+  `<span class="chip"><span class="dot" style="background:var(--status-${cls})"></span>${label}</span>`;
+
+async function main() {
+  const out = $("#out");
+  const site = await fetch("data/status.json").then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+  let bucket = null, bucketErr = null;
+  try {
+    const r = await fetch(BUCKET + "/manifest.json?t=" + Date.now());
+    if (r.ok) bucket = await r.json();
+    else bucketErr = `manifest.json returned HTTP ${r.status} - not yet ` +
+      `published? The backfill job writes it after each push ` +
+      `(data-raw/write_manifest.R).`;
+  } catch (e) {
+    bucketErr = `Could not fetch the bucket manifest from the browser - ` +
+      `most likely CORS is not enabled on the bucket (the object may still ` +
+      `exist: <a class="mono" href="${BUCKET}/manifest.json">open it ` +
+      `directly</a>). Enabling GET CORS on aad-derived unlocks this page ` +
+      `and the live-query tier.`;
+  }
+  if (!site) { out.innerHTML = `<div class="err">data/status.json missing -
+    run data-raw/export_site.R.</div>`; return; }
+
+  const today = new Date();
+  const srcs = [...new Set([...Object.keys(site.sources || {}),
+                            ...Object.keys(bucket?.sums || {})])];
+  let html = "";
+
+  if (bucketErr) html += `<div class="err">${bucketErr}</div>`;
+  if (bucket) html += `<p class="sec">Bucket manifest written
+    <span class="mono">${bucket.generated}</span> on
+    <span class="mono">${bucket.host || "?"}</span>
+    (GDAL ${bucket.gdal || "?"}). Site data baked
+    <span class="mono">${site.generated}</span>.</p>`;
+
+  for (const nm of srcs) {
+    const b = bucket?.sums?.[nm], s = site.sources?.[nm];
+    html += `<h2>${nm}</h2><table>
+      <tr><th>stage</th><th>dates</th><th>first</th><th>last</th>
+          <th>gaps</th><th>size</th><th>as of</th></tr>
+      <tr><td>bucket sums</td>
+          <td class="mono">${b ? b.n.toLocaleString() : "-"}</td>
+          <td class="mono">${b?.first || "-"}</td>
+          <td class="mono">${b?.last || "-"}</td>
+          <td class="mono">${b ? b.gaps : "-"}</td>
+          <td class="mono">${fmtB(b?.bytes)}</td>
+          <td class="mono">${b?.newest_write || (bucket ? "absent" : "unreachable")}</td></tr>
+      <tr><td>site summaries</td>
+          <td class="mono">${s ? s.n.toLocaleString() : "-"}</td>
+          <td class="mono">${s?.first || "-"}</td>
+          <td class="mono">${s?.last || "-"}</td>
+          <td class="mono">${s ? s.gaps.length : "-"}</td>
+          <td class="mono muted">derived</td>
+          <td class="mono">${site.generated}</td></tr>
+    </table>`;
+    // verdicts
+    const v = [];
+    if (b && s) {
+      const dn = b.n - s.n, dd = dayDiff(b.last, s.last);
+      v.push(dn === 0 && dd === 0
+        ? chip("good", "site summaries match the bucket")
+        : chip("warning", `site behind bucket: ${dn} date${dn === 1 ? "" : "s"}` +
+            (dd ? ` (${dd} day${dd === 1 ? "" : "s"} of tail)` : "") +
+            ` - re-run export_site.R and commit`));
+    } else if (s && !b && bucket) {
+      v.push(chip("serious", "in site data but missing from the bucket manifest"));
+    } else if (!b) {
+      v.push(chip("serious", "bucket state unknown"));
+    }
+    if (b) {
+      const behind = dayDiff(today, b.last);
+      v.push(behind <= 3 ? chip("good", `bucket fresh (${behind} d behind today)`)
+        : behind <= 10 ? chip("warning", `bucket lagging (${behind} d behind today)`)
+        : chip("critical", `bucket stale (${behind} d behind today)`));
+    }
+    html += `<p>${v.join(" &nbsp; ")}</p>`;
+  }
+
+  html += `<h2>site data files</h2>
+    <table id="files"><tr><th>file</th><th>size</th><th>last modified</th></tr>
+    ${SITE_FILES.map(f => `<tr data-f="${f}"><td class="mono">
+      <a href="data/${f}">data/${f}</a></td>
+      <td class="mono">...</td><td class="mono">...</td></tr>`).join("")}
+    </table>`;
+  out.innerHTML = html;
+
+  for (const f of SITE_FILES) {
+    fetch("data/" + f, { method: "HEAD" }).then(r => {
+      const tds = document.querySelector(`tr[data-f="${f}"]`).children;
+      tds[1].textContent = r.ok ? fmtB(+r.headers.get("content-length")) : "missing";
+      tds[2].textContent = r.headers.get("last-modified") || "-";
+    }).catch(() => {});
+  }
+}
+main();
+</script>
+</body>
+</html>
