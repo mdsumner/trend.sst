@@ -88,10 +88,16 @@ Promise.all([
 
 function build(meta, monthly) {
   const cells = meta.cells, nm = meta.months.length;
-  const feats = cells.map((c, i) => ({
-    type: "Feature", idx: i,
-    geometry: { type: "Polygon",
-      coordinates: [[...c.ring, c.ring[0]]] } }));
+  const feats = cells.map((c, i) => {
+    const f = { type: "Feature", idx: i,
+      geometry: { type: "Polygon",
+        coordinates: [[...c.ring, c.ring[0]]] } };
+    // d3-geo polygons are spherical: a ring wound the wrong way is the
+    // sphere-complement (everything except the cell). Self-correct by
+    // area: a level-5 cell is tiny, so > hemisphere means rewind.
+    if (d3.geoArea(f) > Math.PI) f.geometry.coordinates[0].reverse();
+    return f;
+  });
 
   $("#app").innerHTML = `
     <div class="controls">
