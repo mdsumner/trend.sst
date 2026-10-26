@@ -123,11 +123,33 @@ ring_of <- function(cell) {
 rings <- lapply(percell$cell, ring_of)
 message(sprintf("%i cell rings built", length(rings)))
 
+## Spilhaus rendering of the same rings, via PROJ (+proj=spilhaus needs
+## PROJ >= 9.6). Optional: silently absent if the local PROJ lacks it,
+## and cells straddling the projection's seams are culled (the cuts run
+## through land, so only a handful of coastal/Bering cells are lost).
+spil <- tryCatch({
+  s <- lapply(rings, function(r) {
+    xy <- reproj::reproj_xy(r, "+proj=spilhaus", source = "EPSG:4326")
+    if (!all(is.finite(xy))) return(NULL)
+    seg <- sqrt(diff(xy[, 1])^2 + diff(xy[, 2])^2)
+    if (max(seg) > 2e6) return(NULL)
+    round(xy / 1000, 1)   # km for compact json
+  })
+  ok <- !vapply(s, is.null, TRUE)
+  if (!any(ok)) NULL else {
+    message(sprintf("spilhaus: %i of %i cells (%i seam-culled)",
+                    sum(ok), length(s), sum(!ok)))
+    s
+  }
+}, error = function(e) { message("spilhaus unavailable: ", conditionMessage(e)); NULL })
+
 cells_out <- lapply(seq_len(nrow(percell)), function(i) {
-  list(id = percell$cell[i], ring = rings[[i]],
+  out <- list(id = percell$cell[i], ring = rings[[i]],
        mean = round(percell$mean[i], 2), trend = round(percell$trend[i], 3),
        anom = round(percell$anom[i], 2), w = round(percell$w[i], 1),
        lon = round(percell$lon[i], 2), lat = round(percell$lat[i], 2))
+  if (!is.null(spil) && !is.null(spil[[i]])) out$sring <- spil[[i]]
+  out
 })
 
 ## ------------------------------------------- monthly matrix (cell-major)

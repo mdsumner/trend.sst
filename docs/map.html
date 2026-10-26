@@ -88,13 +88,23 @@ Promise.all([
 
 function build(meta, monthly) {
   const cells = meta.cells, nm = meta.months.length;
-  const feats = cells.map((c, i) => ({
-    type: "Feature", idx: i,
-    geometry: { type: "Polygon",
-      coordinates: [[...c.ring, c.ring[0]]] } }));
+  const feats = cells.map((c, i) => {
+    const f = { type: "Feature", idx: i,
+      geometry: { type: "Polygon",
+        coordinates: [[...c.ring, c.ring[0]]] } };
+    // d3-geo polygons are spherical: a ring wound the wrong way is the
+    // sphere-complement (everything except the cell). Self-correct by
+    // area: a level-5 cell is tiny, so > hemisphere means rewind.
+    if (d3.geoArea(f) > Math.PI) f.geometry.coordinates[0].reverse();
+    return f;
+  });
 
   $("#app").innerHTML = `
     <div class="controls">
+      <label>View <select id="view">
+        <option value="ortho">Globe</option>
+        <option value="spilhaus">Spilhaus</option>
+      </select></label>
       <label>Color by <select id="metric">
         ${Object.entries(METRICS).map(([k, m]) =>
           `<option value="${k}">${m.label}</option>`).join("")}
@@ -122,15 +132,39 @@ function build(meta, monthly) {
   const path = d3.geoPath(proj);
   const sel = new Set();
   let metric = "trend";
+  let view = "ortho";
 
-  const grat = svg.append("path")
+  // Spilhaus: planar paths from PROJ-projected rings baked by the
+  // exporter (sring, km). Absent sring (older data, seam cells) = hidden.
+  const hasSpil = cells.some(c => c.sring);
+  if (!hasSpil) $("#view").style.display = "none";
+  let spd = null, nseam = 0;
+  if (hasSpil) {
+    let xmin = 1/0, xmax = -1/0, ymin = 1/0, ymax = -1/0;
+    for (const c of cells) if (c.sring)
+      for (const [x, y] of c.sring) {
+        if (x < xmin) xmin = x; if (x > xmax) xmax = x;
+        if (y < ymin) ymin = y; if (y > ymax) ymax = y;
+      }
+    const k = (size - 20) / Math.max(xmax - xmin, ymax - ymin);
+    const ox = (size - k * (xmax - xmin)) / 2, oy = (size - k * (ymax - ymin)) / 2;
+    const px = x => ox + (x - xmin) * k, py = y => oy + (ymax - y) * k;
+    spd = cells.map(c => c.sring
+      ? "M" + c.sring.map(p => px(p[0]).toFixed(1) + "," + py(p[1]).toFixed(1)).join("L") + "Z"
+      : null);
+    nseam = cells.filter(c => !c.sring).length;
+  }
+
+  const root = svg.append("g");
+  const grat = root.append("path")
     .datum(d3.geoGraticule10())
     .attr("fill", "none").attr("stroke-width", .5);
-  const sphere = svg.append("path").datum({ type: "Sphere" })
+  const sphere = root.append("path").datum({ type: "Sphere" })
     .attr("fill", "none").attr("stroke-width", 1);
-  const gc = svg.append("g");
+  const gc = root.append("g");
   const cellP = gc.selectAll("path").data(feats).join("path")
     .attr("stroke-width", .5)
+    .attr("vector-effect", "non-scaling-stroke")
     .on("mousemove", (ev, f) => {
       const c = cells[f.idx], m = METRICS[metric];
       const v = c[metric];
@@ -177,7 +211,22 @@ function build(meta, monthly) {
     $("#selinfo").textContent = sel.size ? `${sel.size} cell${sel.size > 1 ? "s" : ""} selected` : "";
   }
 
-  function render() { cellP.attr("d", path); grat.attr("d", path); sphere.attr("d", path); }
+  const pan = { x: 0, y: 0, k: 1 };
+  function render() {
+    if (view === "ortho") {
+      root.attr("transform", null);
+      grat.style("display", null).attr("d", path);
+      sphere.style("display", null).attr("d", path);
+      cellP.style("display", null).attr("d", path);
+    } else {
+      root.attr("transform",
+        `translate(${pan.x},${pan.y}) scale(${pan.k})`);
+      grat.style("display", "none");
+      sphere.style("display", "none");
+      cellP.style("display", f => spd[f.idx] ? null : "none")
+        .attr("d", f => spd[f.idx]);
+    }
+  }
 
   function drawRamp() {
     const cv = $("#ramp"), cx = cv.getContext("2d"), m = METRICS[metric], R = ramps();
@@ -187,27 +236,49 @@ function build(meta, monthly) {
       cx.fillRect(i, 0, 1, 10);
     }
     const [lo, hi] = m.type === "div" ? [-m.lim, m.lim] : d3.extent(cells, q => q.mean);
-    $("#ramplab").textContent = `${m.fmt(lo)} to ${m.fmt(hi)}`;
+    $("#ramplab").textContent = `${m.fmt(lo)} to ${m.fmt(hi)}` +
+      (view === "spilhaus" && nseam
+        ? ` (${nseam} seam cell${nseam > 1 ? "s" : ""} hidden)` : "");
   }
 
-  // drag rotate + wheel zoom
+  // drag: rotate the globe, or pan the spilhaus plane; wheel zooms both
   let drag = null;
-  svg.on("pointerdown", ev => { drag = [ev.clientX, ev.clientY, proj.rotate()]; })
+  svg.on("pointerdown", ev => {
+       drag = [ev.clientX, ev.clientY,
+               view === "ortho" ? proj.rotate() : { ...pan }]; })
      .on("pointermove", ev => {
        if (!drag) return;
-       const k = 90 / proj.scale();
-       proj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k,
-                    Math.max(-90, Math.min(90, drag[2][1] - (ev.clientY - drag[1]) * k))]);
+       if (view === "ortho") {
+         const k = 90 / proj.scale();
+         proj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k,
+                      Math.max(-90, Math.min(90, drag[2][1] - (ev.clientY - drag[1]) * k))]);
+       } else {
+         pan.x = drag[2].x + (ev.clientX - drag[0]);
+         pan.y = drag[2].y + (ev.clientY - drag[1]);
+       }
        render();
      })
      .on("pointerup pointerleave", () => drag = null)
      .on("wheel", ev => {
        ev.preventDefault();
-       proj.scale(Math.max(size / 4, Math.min(size * 2,
-         proj.scale() * (ev.deltaY < 0 ? 1.12 : 0.9))));
+       if (view === "ortho") {
+         proj.scale(Math.max(size / 4, Math.min(size * 2,
+           proj.scale() * (ev.deltaY < 0 ? 1.12 : 0.9))));
+       } else {
+         const f = ev.deltaY < 0 ? 1.12 : 0.9;
+         const k2 = Math.max(.5, Math.min(8, pan.k * f)), r = k2 / pan.k;
+         pan.x = size / 2 + (pan.x - size / 2) * r;
+         pan.y = size / 2 + (pan.y - size / 2) * r;
+         pan.k = k2;
+       }
        render();
      });
 
+  $("#view").addEventListener("change", e => {
+    view = e.target.value;
+    pan.x = 0; pan.y = 0; pan.k = 1;
+    render(); drawRamp();
+  });
   $("#metric").addEventListener("change", e => { metric = e.target.value; restyle(); });
   $("#clear").addEventListener("click", () => { sel.clear(); restyle(); drawSeries(); });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
