@@ -189,9 +189,17 @@ writeBin(as.numeric(t(mat)), con, size = 4, endian = "little")
 close(con)
 message(sprintf("monthly.bin: %i cells x %i months", nrow(mat), nm))
 
+## the named regions as pre-selected cell sets (0-based indices into
+## cells); the map's presets and the series regions are the same objects
+region_sets <- Map(function(lab, cc) {
+  ix <- if (is.null(cc)) seq_len(nrow(percell)) - 1L
+        else which(percell$cell %in% cc) - 1L
+  list(label = lab, cells = ix)
+}, region_labels, region_cells[names(region_labels)])
+
 jsonlite::write_json(
   list(source = "oisst", years = range(YEARS),
        months = sprintf("%04i-%02i", yms %/% 100L, yms %% 100L),
-       baseline = "1982-2011", cells = cells_out),
+       baseline = "1982-2011", regions = region_sets, cells = cells_out),
   file.path(out, "cells.json"), auto_unbox = TRUE, digits = NA, na = "null")
 message("cells.json written")

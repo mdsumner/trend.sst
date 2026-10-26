@@ -109,6 +109,9 @@ function build(meta, monthly) {
         ${Object.entries(METRICS).map(([k, m]) =>
           `<option value="${k}">${m.label}</option>`).join("")}
       </select></label>
+      <label id="regwrap">Region <select id="regionsel">
+        <option value="">Preset...</option>
+      </select></label>
       <button class="btn" id="clear">Clear selection</button>
       <span id="selinfo"></span>
     </div>
@@ -131,8 +134,27 @@ function build(meta, monthly) {
     .rotate([155, 10]).clipAngle(90).precision(.5);
   const path = d3.geoPath(proj);
   const sel = new Set();
+  let selLabel = null;
   let metric = "trend";
   let view = "ortho";
+
+  // preset regions = the same named cell sets the series page uses;
+  // a preset replaces the selection, then clicks edit it cell by cell
+  const regionsel = $("#regionsel");
+  if (meta.regions) {
+    for (const [k, r] of Object.entries(meta.regions)) {
+      const o = document.createElement("option");
+      o.value = k; o.textContent = r.label; regionsel.appendChild(o);
+    }
+    regionsel.addEventListener("change", e => {
+      const k = e.target.value;
+      if (!k) return;
+      sel.clear();
+      for (const i of meta.regions[k].cells) sel.add(i);
+      selLabel = meta.regions[k].label;
+      restyle(); drawSeries();
+    });
+  } else $("#regwrap").style.display = "none";
 
   // Spilhaus: planar paths from PROJ-projected rings baked by the
   // exporter (sring, km). Absent sring (older data, seam cells) = hidden.
@@ -176,6 +198,7 @@ function build(meta, monthly) {
     .on("mouseleave", hideTip)
     .on("click", (ev, f) => {
       sel.has(f.idx) ? sel.delete(f.idx) : sel.add(f.idx);
+      selLabel = null; regionsel.value = "";
       restyle(); drawSeries();
     });
 
@@ -280,7 +303,10 @@ function build(meta, monthly) {
     render(); drawRamp();
   });
   $("#metric").addEventListener("change", e => { metric = e.target.value; restyle(); });
-  $("#clear").addEventListener("click", () => { sel.clear(); restyle(); drawSeries(); });
+  $("#clear").addEventListener("click", () => {
+    sel.clear(); selLabel = null; regionsel.value = "";
+    restyle(); drawSeries();
+  });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
     () => { restyle(); drawSeries(); });
 
@@ -290,7 +316,8 @@ function build(meta, monthly) {
     const w = Math.min(520, $(".panel").clientWidth), h = 300;
     svg2.attr("width", w).attr("height", h);
     if (!sel.size) { $("#ptitle").textContent = "Region series"; return; }
-    $("#ptitle").textContent = `Region series (${sel.size} cell${sel.size > 1 ? "s" : ""})`;
+    $("#ptitle").textContent = `Region series (${selLabel ? selLabel + ", " : ""}` +
+      `${sel.size} cell${sel.size > 1 ? "s" : ""})`;
     const idx = [...sel];
     const pts = [];
     for (let m = 0; m < nm; m++) {
