@@ -51,12 +51,14 @@ region_cells <- list(
   sh = cells_latband(reg, -90, 0),
   tropics = cells_latband(reg, -23.4, 23.4),
   so60 = cells_latband(reg, -90, -60),
+  no60 = cells_latband(reg, 60, 90),
   nino34 = reg$cell[reg$lat > -5 & reg$lat < 5 &
                     reg$lon > -170 & reg$lon < -120])
 region_labels <- list(
   cr = "60S-60N", global = "Global",
   nh = "N hemisphere", sh = "S hemisphere",
   tropics = "Tropics 23S-23N", so60 = "South of 60S",
+  no60 = "North of 60N",
   nino34 = "Nino 3.4")
 
 rnd <- function(x) round(x, 3)
