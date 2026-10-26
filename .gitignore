@@ -8,3 +8,5 @@ mapping
 sums
 *.png
 *.out
+cache
+
