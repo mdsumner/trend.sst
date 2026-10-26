@@ -1,0 +1,22 @@
+{
+  "generated": "2026-10-26T03:40:31Z",
+  "provenance": {
+    "gdal": "3.14.0dev-a9f9f9ed54"
+  },
+  "sources": {
+    "oisst": {
+      "first": "1981-09-01",
+      "last": "2026-10-24",
+      "n": 16490,
+      "gaps": [],
+      "provisional_days": 14
+    },
+    "ghrsst": {
+      "first": "2002-06-01",
+      "last": "2026-08-22",
+      "n": 8849,
+      "gaps": [],
+      "provisional_days": 10
+    }
+  }
+}
