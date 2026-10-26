@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trend.sst - cell explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f0efec;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
+    --series-1: #2a78d6; --grid: #e4e3de; --border: #d8d7d0;
+    --div-mid: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
+      --series-1: #3987e5; --grid: #32322f; --border: #3d3d39;
+      --div-mid: #383835;
+    }
+  }
+  html, body { margin: 0; }
+  .viz-root { background: var(--surface-1); color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; padding: 20px 24px 40px; }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 4px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; }
+  nav a { color: var(--series-1); text-decoration: none; font-size: 13px; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 14px; }
+  .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 10px; font-size: 13px; color: var(--text-secondary); }
+  select, button.btn { font: inherit; color: var(--text-primary);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  .cols { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  #globe { touch-action: none; cursor: grab; }
+  #globe:active { cursor: grabbing; }
+  .panel { flex: 1 1 360px; min-width: 320px; }
+  .panel h2 { font-size: 15px; margin: 2px 0 2px; font-weight: 650; }
+  .note { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 8px; }
+  .legend { font-size: 12px; color: var(--text-secondary);
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    font-variant-numeric: tabular-nums; }
+  .tooltip { position: fixed; pointer-events: none; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px;
+    font-size: 12.5px; display: none; z-index: 5;
+    box-shadow: 0 2px 10px rgba(0,0,0,.12); font-variant-numeric: tabular-nums; }
+  .err { background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+<header><h1>trend.sst cell explorer</h1>
+  <nav><a href="index.html">store status</a></nav></header>
+<p class="sub">Level-5 S2 cells over the OISST record. Drag to rotate, wheel to
+zoom, click cells to build a region; its series is computed from the cell sums
+in your browser.</p>
+<div id="app"><div class="err">Loading data/cells.json ...</div></div>
+<div class="tooltip" id="tip"></div>
+</div></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const css = v => getComputedStyle($(".viz-root")).getPropertyValue(v).trim();
+const tip = $("#tip");
+const showTip = (h, x, y) => { tip.innerHTML = h; tip.style.display = "block";
+  tip.style.left = (x + 14) + "px"; tip.style.top = (y + 14) + "px"; };
+const hideTip = () => tip.style.display = "none";
+
+const BLUE = ["#cde2fb","#9ec5f4","#6da7ec","#3987e5","#256abf","#184f95","#0d366b"];
+const METRICS = {
+  trend: { label: "Trend (C/decade, 1982-2025)", lim: 0.6, type: "div", fmt: v => v.toFixed(2) },
+  anom:  { label: "Last 12 months vs 1982-2011 (C)", lim: 1.5, type: "div", fmt: v => v.toFixed(2) },
+  mean:  { label: "Mean SST (C, 1982-2025)", type: "seq", fmt: v => v.toFixed(1) }
+};
+
+Promise.all([
+  fetch("data/cells.json").then(r => r.ok ? r.json() : Promise.reject("cells.json")),
+  fetch("data/monthly.bin").then(r => r.ok ? r.arrayBuffer() : Promise.reject("monthly.bin"))
+]).then(([meta, buf]) => build(meta, new Float32Array(buf)))
+  .catch(e => $("#app").innerHTML =
+    `<div class="err">Could not load ${e}. Run data-raw/export_site.R and commit docs/data/.</div>`);
+
+function build(meta, monthly) {
+  const cells = meta.cells, nm = meta.months.length;
+  const feats = cells.map((c, i) => ({
+    type: "Feature", idx: i,
+    geometry: { type: "Polygon",
+      coordinates: [[...c.ring, c.ring[0]]] } }));
+
+  $("#app").innerHTML = `
+    <div class="controls">
+      <label>Color by <select id="metric">
+        ${Object.entries(METRICS).map(([k, m]) =>
+          `<option value="${k}">${m.label}</option>`).join("")}
+      </select></label>
+      <button class="btn" id="clear">Clear selection</button>
+      <span id="selinfo"></span>
+    </div>
+    <div class="cols">
+      <div><svg id="globe"></svg><div class="legend">
+        <canvas id="ramp" width="180" height="10"></canvas><span id="ramplab"></span>
+      </div></div>
+      <div class="panel">
+        <h2 id="ptitle">Region series</h2>
+        <p class="note" id="pnote">Click cells on the globe; the monthly series
+        of the union is an area-weighted combination of cell sums.</p>
+        <svg id="pchart"></svg>
+      </div>
+    </div>`;
+
+  const size = Math.min(620, Math.max(380, innerWidth - 480));
+  const svg = d3.select("#globe").attr("width", size).attr("height", size);
+  const proj = d3.geoOrthographic()
+    .translate([size / 2, size / 2]).scale(size / 2 - 8)
+    .rotate([155, 10]).clipAngle(90).precision(.5);
+  const path = d3.geoPath(proj);
+  const sel = new Set();
+  let metric = "trend";
+
+  const grat = svg.append("path")
+    .datum(d3.geoGraticule10())
+    .attr("fill", "none").attr("stroke-width", .5);
+  const sphere = svg.append("path").datum({ type: "Sphere" })
+    .attr("fill", "none").attr("stroke-width", 1);
+  const gc = svg.append("g");
+  const cellP = gc.selectAll("path").data(feats).join("path")
+    .attr("stroke-width", .5)
+    .on("mousemove", (ev, f) => {
+      const c = cells[f.idx], m = METRICS[metric];
+      const v = c[metric];
+      showTip(`<b>${c.id}</b> (${c.lat}, ${c.lon})<br>` +
+        `${m.label}: ${v == null ? "-" : m.fmt(v)}<br>` +
+        `mean ${c.mean} C &middot; trend ${c.trend ?? "-"} C/dec`,
+        ev.clientX, ev.clientY);
+    })
+    .on("mouseleave", hideTip)
+    .on("click", (ev, f) => {
+      sel.has(f.idx) ? sel.delete(f.idx) : sel.add(f.idx);
+      restyle(); drawSeries();
+    });
+
+  function ramps() {
+    const mid = css("--div-mid");
+    return {
+      div: t => t < .5
+        ? d3.interpolateRgbBasis([BLUE[6], BLUE[3], BLUE[0], mid])(t * 2)
+        : d3.interpolateRgbBasis([mid, "#f3b0a9", "#e34948", "#8f1f1e"])((t - .5) * 2),
+      seq: d3.interpolateRgbBasis(BLUE)
+    };
+  }
+
+  function colorOf(c) {
+    const m = METRICS[metric], v = c[metric], R = ramps();
+    if (v == null || !isFinite(v)) return css("--surface-2");
+    if (m.type === "div") {
+      const t = Math.max(-1, Math.min(1, v / m.lim)) / 2 + .5;
+      return R.div(t);
+    }
+    const [lo, hi] = d3.extent(cells, q => q.mean);
+    return R.seq((v - lo) / (hi - lo));
+  }
+
+  function restyle() {
+    grat.attr("stroke", css("--grid"));
+    sphere.attr("stroke", css("--border"));
+    cellP.attr("fill", f => colorOf(cells[f.idx]))
+      .attr("stroke", f => sel.has(f.idx) ? css("--text-primary") : css("--surface-1"))
+      .attr("stroke-width", f => sel.has(f.idx) ? 1.6 : .5);
+    cellP.filter(f => sel.has(f.idx)).raise();
+    drawRamp();
+    $("#selinfo").textContent = sel.size ? `${sel.size} cell${sel.size > 1 ? "s" : ""} selected` : "";
+  }
+
+  function render() { cellP.attr("d", path); grat.attr("d", path); sphere.attr("d", path); }
+
+  function drawRamp() {
+    const cv = $("#ramp"), cx = cv.getContext("2d"), m = METRICS[metric], R = ramps();
+    for (let i = 0; i < 180; i++) {
+      cx.fillStyle = m.type === "div" ? R.div(i / 179)
+        : R.seq(i / 179);
+      cx.fillRect(i, 0, 1, 10);
+    }
+    const [lo, hi] = m.type === "div" ? [-m.lim, m.lim] : d3.extent(cells, q => q.mean);
+    $("#ramplab").textContent = `${m.fmt(lo)} to ${m.fmt(hi)}`;
+  }
+
+  // drag rotate + wheel zoom
+  let drag = null;
+  svg.on("pointerdown", ev => { drag = [ev.clientX, ev.clientY, proj.rotate()]; })
+     .on("pointermove", ev => {
+       if (!drag) return;
+       const k = 90 / proj.scale();
+       proj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k,
+                    Math.max(-90, Math.min(90, drag[2][1] - (ev.clientY - drag[1]) * k))]);
+       render();
+     })
+     .on("pointerup pointerleave", () => drag = null)
+     .on("wheel", ev => {
+       ev.preventDefault();
+       proj.scale(Math.max(size / 4, Math.min(size * 2,
+         proj.scale() * (ev.deltaY < 0 ? 1.12 : 0.9))));
+       render();
+     });
+
+  $("#metric").addEventListener("change", e => { metric = e.target.value; restyle(); });
+  $("#clear").addEventListener("click", () => { sel.clear(); restyle(); drawSeries(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
+    () => { restyle(); drawSeries(); });
+
+  // region series: area-weighted combination of cell monthly means
+  function drawSeries() {
+    const svg2 = d3.select("#pchart"); svg2.selectAll("*").remove();
+    const w = Math.min(520, $(".panel").clientWidth), h = 300;
+    svg2.attr("width", w).attr("height", h);
+    if (!sel.size) { $("#ptitle").textContent = "Region series"; return; }
+    $("#ptitle").textContent = `Region series (${sel.size} cell${sel.size > 1 ? "s" : ""})`;
+    const idx = [...sel];
+    const pts = [];
+    for (let m = 0; m < nm; m++) {
+      let sw = 0, swx = 0;
+      for (const i of idx) {
+        const v = monthly[i * nm + m];
+        if (isFinite(v)) { const wi = cells[i].w; sw += wi; swx += wi * v; }
+      }
+      if (sw > 0) pts.push({ d: new Date(meta.months[m] + "-15"), v: swx / sw });
+    }
+    const M = { t: 12, r: 12, b: 26, l: 42 };
+    const x = d3.scaleTime().domain(d3.extent(pts, p => p.d)).range([M.l, w - M.r]);
+    const y = d3.scaleLinear().domain(d3.extent(pts, p => p.v)).nice()
+      .range([h - M.b, M.t]);
+    const ax = g => { g.selectAll("path,line").attr("stroke", css("--grid"));
+      g.selectAll("text").attr("fill", css("--text-secondary")).attr("font-size", 11); };
+    svg2.append("g").attr("transform", `translate(0,${h - M.b})`)
+      .call(d3.axisBottom(x).ticks(6).tickSizeOuter(0)).call(ax);
+    svg2.append("g").attr("transform", `translate(${M.l},0)`)
+      .call(d3.axisLeft(y).ticks(5).tickSize(-(w - M.l - M.r)).tickSizeOuter(0))
+      .call(ax).call(g => g.selectAll(".tick line").attr("opacity", .5));
+    svg2.append("path")
+      .attr("d", d3.line().x(p => x(p.d)).y(p => y(p.v))(pts))
+      .attr("fill", "none").attr("stroke", css("--series-1"))
+      .attr("stroke-width", 1.8);
+    const hair = svg2.append("line").attr("y1", M.t).attr("y2", h - M.b)
+      .attr("stroke", css("--text-muted")).attr("stroke-dasharray", "3 3")
+      .style("display", "none");
+    svg2.append("rect").attr("x", M.l).attr("y", M.t)
+      .attr("width", w - M.l - M.r).attr("height", h - M.t - M.b)
+      .attr("fill", "transparent")
+      .on("mousemove", ev => {
+        const d0 = x.invert(d3.pointer(ev)[0]);
+        const p = pts[d3.bisector(q => q.d).center(pts, d0)];
+        if (!p) return;
+        hair.attr("x1", x(p.d)).attr("x2", x(p.d)).style("display", null);
+        showTip(`<b>${d3.timeFormat("%Y-%m")(p.d)}</b><br>${p.v.toFixed(2)} C`,
+          ev.clientX, ev.clientY);
+      })
+      .on("mouseleave", () => { hair.style("display", "none"); hideTip(); });
+  }
+
+  restyle(); render(); drawSeries();
+}
+</script>
+</body>
+</html>
