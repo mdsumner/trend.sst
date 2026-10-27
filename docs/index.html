@@ -36,8 +36,11 @@
   header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
            margin-bottom: 4px; }
   h1 { font-size: 20px; margin: 0; font-weight: 650; }
-  nav a { color: var(--series-1); text-decoration: none; font-size: 13px; }
-  nav a:hover { text-decoration: underline; }
+  nav { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  nav a { color: var(--series-1); text-decoration: none; font-size: 12.5px;
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-2); white-space: nowrap; }
+  nav a:hover { border-color: var(--series-1); }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 18px; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
            gap: 12px; margin-bottom: 22px; }
@@ -84,7 +87,7 @@
 <div class="viz-root"><div class="wrap">
 <header>
   <h1>trend.sst</h1>
-  <nav><a href="map.html">cell explorer</a> <a href="mechanics.html">mechanics</a></nav>
+  <nav><a href="map.html">cell explorer</a> <a href="mechanics.html">mechanics</a> <a href="https://australianantarcticdivision.github.io/ghrsst-cogger/">COG pipeline</a></nav>
 </header>
 <p class="sub">Daily SST as sufficient statistics on S2 cells. Store status and
 sanity series; generated <span id="gen">-</span>.</p>

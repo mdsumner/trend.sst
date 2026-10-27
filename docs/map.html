@@ -30,7 +30,11 @@
   .wrap { max-width: 1200px; margin: 0 auto; }
   header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 4px; }
   h1 { font-size: 20px; margin: 0; font-weight: 650; }
-  nav a { color: var(--series-1); text-decoration: none; font-size: 13px; }
+  nav { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  nav a { color: var(--series-1); text-decoration: none; font-size: 12.5px;
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-2); white-space: nowrap; }
+  nav a:hover { border-color: var(--series-1); }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 14px; }
   .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
     margin-bottom: 10px; font-size: 13px; color: var(--text-secondary); }
@@ -67,7 +71,7 @@
 <body>
 <div class="viz-root"><div class="wrap">
 <header><h1>trend.sst cell explorer</h1>
-  <nav><a href="index.html">store status</a> <a href="mechanics.html">mechanics</a></nav></header>
+  <nav><a href="index.html">store status</a> <a href="mechanics.html">mechanics</a> <a href="https://australianantarcticdivision.github.io/ghrsst-cogger/">COG pipeline</a></nav></header>
 <p class="sub">Level-5 S2 cells per source, or their difference. Drag to rotate, wheel to
 zoom, click cells to build a region; its series is computed from the cell sums
 in your browser.</p>
