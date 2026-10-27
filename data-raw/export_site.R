@@ -8,6 +8,11 @@
 ##   docs/data/cells.json    cell rings (slerp-densified) + per-cell metrics
 ##   docs/data/monthly.bin   Float32 cell x month mean matrix (cell-major)
 
+## arrow first: it must register its filesystems before anything
+## loads GDAL's bundled libarrow (gdalraster/vapour via trend.sst,
+## or the gdal_version provenance call), or arrow halts with
+## "register factory for scheme 'file'" -- same fix as backfill.R
+library(arrow)
 library(trend.sst)
 library(dplyr)
 
