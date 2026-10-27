@@ -11,6 +11,10 @@
 ## them per date and the node page cache shares one copy; gzip would put
 ## decompression in the inner loop.
 
+## arrow must initialize before anything loads GDAL's own libarrow,
+## or arrow's filesystem registration fails with
+## "register factory for scheme 'file'" (seen 2026-10-27 pulse check)
+library(arrow)
 library(trend.sst)
 
 src_name <- Sys.getenv("SST_SOURCE", "oisst")
@@ -75,6 +79,10 @@ if (length(todo) > 0 && n_workers > 1) {
 }
 
 ## no collation: the parquet dataset IS the product. Pulse check:
-s <- series_stats(out_path)
-message(sprintf("[%s] %i dates in sums; global mean %.2f .. %.2f",
-                src_name, nrow(s), min(s$mean), max(s$mean)))
+p <- try({
+  s <- series_stats(out_path)
+  message(sprintf("[%s] %i dates in sums; global mean %.2f .. %.2f",
+                  src_name, nrow(s), min(s$mean), max(s$mean)))
+}, silent = TRUE)
+if (inherits(p, "try-error"))
+  message("pulse check failed (non-fatal): ", attr(p, "condition")$message)
