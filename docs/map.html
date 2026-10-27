@@ -91,6 +91,10 @@ const DIFF_METRICS = {
 };
 
 const DATA = {};
+// UI state survives source switches: selection travels by cell ID
+const UI = { metric: "trend", view: "ortho", panelView: "time",
+             selIds: [], selLabel: null, regionKey: "",
+             rotate: [155, 10], scale: null, pan: { x: 0, y: 0, k: 1 } };
 function fetchSource(src) {
   if (DATA[src]) return Promise.resolve(DATA[src]);
   return Promise.all([
@@ -161,6 +165,7 @@ function build(srcName, meta, monthly, aux) {
       <label>View <select id="view">
         <option value="ortho">Globe</option>
         <option value="spilhaus">Spilhaus</option>
+        <option value="faces">Cube net</option>
       </select></label>
       <label>Color by <select id="metric">
         ${Object.entries(MET).map(([k, m]) =>
@@ -192,13 +197,16 @@ function build(srcName, meta, monthly, aux) {
   const size = Math.min(620, Math.max(380, innerWidth - 480));
   const svg = d3.select("#globe").attr("width", size).attr("height", size);
   const proj = d3.geoOrthographic()
-    .translate([size / 2, size / 2]).scale(size / 2 - 8)
-    .rotate([155, 10]).clipAngle(90).precision(.5);
+    .translate([size / 2, size / 2]).scale(UI.scale || size / 2 - 8)
+    .rotate(UI.rotate).clipAngle(90).precision(.5);
   const path = d3.geoPath(proj);
-  const sel = new Set();
-  let selLabel = null;
-  let metric = "trend";
-  let view = "ortho";
+  const byId = new Map(cells.map((c, i) => [c.id, i]));
+  const sel = new Set(UI.selIds.map(id => byId.get(id)).filter(i => i != null));
+  let selLabel = UI.selLabel;
+  let metric = UI.metric;
+  let view = UI.view;
+  const saveSel = () => { UI.selIds = [...sel].map(i => cells[i].id);
+                          UI.selLabel = selLabel; };
 
   // preset regions = the same named cell sets the series page uses;
   // a preset replaces the selection, then clicks edit it cell by cell
@@ -214,18 +222,22 @@ function build(srcName, meta, monthly, aux) {
       sel.clear();
       for (const i of meta.regions[k].cells) sel.add(i);
       selLabel = meta.regions[k].label;
+      UI.regionKey = k; saveSel();
       restyle(); drawSeries();
     });
+    regionsel.value = UI.regionKey || "";
   } else $("#regwrap").style.display = "none";
 
   $("#cellsrc").value = srcName;
   $("#cellsrc").addEventListener("change", e => loadSource(e.target.value));
 
-  let panelView = "time";
+  let panelView = UI.panelView;
+  for (const x of $("#pseg").children)
+    x.classList.toggle("on", x.dataset.v === panelView);
   if (srcName === "diff") $("#pviewwrap").style.display = "none";
   $("#pseg").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    panelView = b.dataset.v;
+    panelView = UI.panelView = b.dataset.v;
     for (const x of $("#pseg").children) x.classList.toggle("on", x === b);
     drawSeries();
   });
@@ -233,7 +245,10 @@ function build(srcName, meta, monthly, aux) {
   // Spilhaus: planar paths from PROJ-projected rings baked by the
   // exporter (sring, km). Absent sring (older data, seam cells) = hidden.
   const hasSpil = cells.some(c => c.sring);
-  if (!hasSpil) $("#view").style.display = "none";
+  if (!hasSpil) {
+    $("#view").querySelector('option[value="spilhaus"]').remove();
+    if (view === "spilhaus") view = UI.view = "ortho";
+  }
   let spd = null, nseam = 0;
   if (hasSpil) {
     let xmin = 1/0, xmax = -1/0, ymin = 1/0, ymax = -1/0;
@@ -251,7 +266,47 @@ function build(srcName, meta, monthly, aux) {
     nseam = cells.filter(c => !c.sring).length;
   }
 
+  // S2 cube net: each cell in its face's uv square via the gnomonic
+  // face projection (S2's own geometry); 2x3 layout, seams explicit
+  const faceOf = id => Math.floor(parseInt(id[0], 16) / 2);
+  const uvOf = (f, x, y, z) => {
+    switch (f) {
+      case 0: return [y / x, z / x];
+      case 1: return [-x / y, z / y];
+      case 2: return [-x / z, -y / z];
+      case 3: return [z / x, y / x];
+      case 4: return [z / y, -x / y];
+      default: return [-y / z, -x / z];
+    }
+  };
+  const FS = (size - 48) / 3, FM = 24;
+  const faceXY = f => [FM + (f % 3) * FS, FM + Math.floor(f / 3) * (FS + 8)];
+  const fcPaths = cells.map(c => {
+    const f = faceOf(c.id), o = faceXY(f);
+    const pts = c.ring.map(([lon, lat]) => {
+      const cl = Math.cos(lat * Math.PI / 180);
+      const uv = uvOf(f, cl * Math.cos(lon * Math.PI / 180),
+                         cl * Math.sin(lon * Math.PI / 180),
+                         Math.sin(lat * Math.PI / 180));
+      const u = Math.max(-1, Math.min(1, uv[0]));
+      const v = Math.max(-1, Math.min(1, uv[1]));
+      return (o[0] + (u + 1) / 2 * FS).toFixed(1) + "," +
+             (o[1] + (1 - v) / 2 * FS).toFixed(1);
+    });
+    return "M" + pts.join("L") + "Z";
+  });
+
   const root = svg.append("g");
+  const ffg = root.append("g").style("display", "none");
+  for (let f = 0; f < 6; f++) {
+    const o = faceXY(f);
+    ffg.append("rect").attr("x", o[0]).attr("y", o[1])
+      .attr("width", FS).attr("height", FS)
+      .attr("fill", "none").attr("stroke", css("--border"));
+    ffg.append("text").attr("x", o[0] + 4).attr("y", o[1] + 12)
+      .attr("font-size", 10).attr("fill", css("--text-muted"))
+      .text("face " + f);
+  }
   const grat = root.append("path")
     .datum(d3.geoGraticule10())
     .attr("fill", "none").attr("stroke-width", .5);
@@ -272,7 +327,8 @@ function build(srcName, meta, monthly, aux) {
     .on("mouseleave", hideTip)
     .on("click", (ev, f) => {
       sel.has(f.idx) ? sel.delete(f.idx) : sel.add(f.idx);
-      selLabel = null; regionsel.value = "";
+      selLabel = null; regionsel.value = ""; UI.regionKey = "";
+      saveSel();
       restyle(); drawSeries();
     });
 
@@ -308,9 +364,12 @@ function build(srcName, meta, monthly, aux) {
     $("#selinfo").textContent = sel.size ? `${sel.size} cell${sel.size > 1 ? "s" : ""} selected` : "";
   }
 
-  const pan = { x: 0, y: 0, k: 1 };
+  const pan = UI.pan;
   function render() {
-    if (view === "ortho") {
+    const planar = view === "spilhaus" ? spd
+                 : view === "faces" ? fcPaths : null;
+    ffg.style("display", view === "faces" ? null : "none");
+    if (!planar) {
       root.attr("transform", null);
       grat.style("display", null).attr("d", path);
       sphere.style("display", null).attr("d", path);
@@ -320,8 +379,8 @@ function build(srcName, meta, monthly, aux) {
         `translate(${pan.x},${pan.y}) scale(${pan.k})`);
       grat.style("display", "none");
       sphere.style("display", "none");
-      cellP.style("display", f => spd[f.idx] ? null : "none")
-        .attr("d", f => spd[f.idx]);
+      cellP.style("display", f => planar[f.idx] ? null : "none")
+        .attr("d", f => planar[f.idx]);
     }
   }
 
@@ -349,6 +408,7 @@ function build(srcName, meta, monthly, aux) {
          const k = 90 / proj.scale();
          proj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k,
                       Math.max(-90, Math.min(90, drag[2][1] - (ev.clientY - drag[1]) * k))]);
+         UI.rotate = proj.rotate();
        } else {
          pan.x = drag[2].x + (ev.clientX - drag[0]);
          pan.y = drag[2].y + (ev.clientY - drag[1]);
@@ -361,6 +421,7 @@ function build(srcName, meta, monthly, aux) {
        if (view === "ortho") {
          proj.scale(Math.max(size / 4, Math.min(size * 2,
            proj.scale() * (ev.deltaY < 0 ? 1.12 : 0.9))));
+         UI.scale = proj.scale();
        } else {
          const f = ev.deltaY < 0 ? 1.12 : 0.9;
          const k2 = Math.max(.5, Math.min(8, pan.k * f)), r = k2 / pan.k;
@@ -371,14 +432,19 @@ function build(srcName, meta, monthly, aux) {
        render();
      });
 
+  $("#view").value = view;
+  $("#metric").value = metric;
   $("#view").addEventListener("change", e => {
-    view = e.target.value;
+    view = UI.view = e.target.value;
     pan.x = 0; pan.y = 0; pan.k = 1;
     render(); drawRamp();
   });
-  $("#metric").addEventListener("change", e => { metric = e.target.value; restyle(); });
+  $("#metric").addEventListener("change", e => {
+    metric = UI.metric = e.target.value; restyle();
+  });
   $("#clear").addEventListener("click", () => {
-    sel.clear(); selLabel = null; regionsel.value = "";
+    sel.clear(); selLabel = null; regionsel.value = ""; UI.regionKey = "";
+    saveSel();
     restyle(); drawSeries();
   });
   window._mapRedraw = () => { restyle(); drawSeries(); };
