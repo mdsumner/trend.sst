@@ -8,13 +8,15 @@
 ##   docs/data/cells.json    cell rings (slerp-densified) + per-cell metrics
 ##   docs/data/monthly.bin   Float32 cell x month mean matrix (cell-major)
 
-## arrow first: it must register its filesystems before anything
-## loads GDAL's bundled libarrow (gdalraster/vapour via trend.sst,
-## or the gdal_version provenance call), or arrow halts with
-## "register factory for scheme 'file'" -- same fix as backfill.R
+## The exporter is deliberately GDAL-FREE: library(trend.sst) pulls in
+## vapour and so GDAL's bundled libarrow, which clashes with R arrow's
+## filesystem registration ("register factory for scheme 'file'",
+## jobs 51664079+). Nothing here reads a raster, so source the
+## query-layer functions directly and never load GDAL at all.
 library(arrow)
-library(trend.sst)
 library(dplyr)
+source("R/cells.R")    # cells_latband (s2 only)
+source("R/series.R")   # series_stats (arrow/dplyr only)
 
 args <- commandArgs(trailingOnly = TRUE)
 cache <- if (length(args) >= 1) args[1] else "cache"
@@ -39,8 +41,6 @@ src_status <- function(p, pd) {
 }
 status <- list(
   generated = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
-  provenance = list(gdal = tryCatch(
-    gdalraster::gdal_version()[4], error = function(e) NA)),
   sources = lapply(names(paths), function(nm)
     src_status(paths[[nm]], prov_days[[nm]])) |> setNames(names(paths)))
 jsonlite::write_json(status, file.path(out, "status.json"),
