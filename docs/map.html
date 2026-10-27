@@ -262,15 +262,28 @@ function build(srcName, meta, monthly, aux) {
     const hdr = `${ids.length} cell${ids.length > 1 ? "s" : ""}` +
       (label ? ` (${label})` : "") + " selected in the trend.sst explorer;" +
       " newest ~10 days are provisional";
+    const cc = lang === "r" ? "## " : lang === "sql" ? "-- " : "# ";
+    const note = [
+      "This reads the AUTHORITATIVE store: daily sufficient statistics",
+      "(n, sumw, sumwx, sumwx2) per S2 cell, one parquet per date on",
+      "object storage. The full record is ~9,000 files per source, so",
+      "an unfiltered read takes minutes; the date filter below keeps",
+      "the default quick. (The website itself reads small baked",
+      "monthly JSON derived from these sums -- downstream, hence fast.)"
+    ].map(l => cc + l).join("\n");
+    const since = new Date(Date.now() - 3 * 31557600000)
+      .toISOString().slice(0, 10);
     if (lang === "r") {
-      let s = `## ${hdr}\nlibrary(arrow)\nlibrary(dplyr)\n` +
+      let s = `## ${hdr}\n${note}\nlibrary(arrow)\nlibrary(dplyr)\n` +
         `ts <- s3_bucket("${BK}",\n` +
         `  endpoint_override = "https://${EP}",\n` +
         `  region = "", anonymous = TRUE)\n` +
-        `cells <- c(\n${idLines(ids, '"', "  ")})\n\n` +
+        `cells <- c(\n${idLines(ids, '"', "  ")})\n` +
+        `## widen or remove for the full record (slower, see note above)\n` +
+        `since <- as.Date("${since}")\n\n` +
         `read_region <- function(src) {\n` +
         `  open_dataset(ts$path(paste0("sums/", src))) |>\n` +
-        `    filter(cell %in% cells) |>\n` +
+        `    filter(cell %in% cells, date >= since) |>\n` +
         `    group_by(date) |>\n` +
         `    summarise(n = sum(n), sumw = sum(sumw),\n` +
         `              sumwx = sum(sumwx), sumwx2 = sum(sumwx2)) |>\n` +
@@ -283,22 +296,34 @@ function build(srcName, meta, monthly, aux) {
           `                by = "date", suffix = c("_g", "_o")) |>\n` +
           `  mutate(diff = mean_g - mean_o)\n`
         : `d <- read_region("${srcs[0]}")\n`;
+      s += `\n## Seasonal slices are FILE-LIST pruning here: the layout\n` +
+        `## partitions by date in the filename, so e.g. every December\n` +
+        `## across the whole record reads no off-month bytes at all:\n` +
+        `# dec <- grep("-12-", ts$ls("sums/${srcs[0]}"), value = TRUE)\n` +
+        `# d12 <- open_dataset(dec, filesystem = ts) |>\n` +
+        `#   filter(cell %in% cells) |> group_by(date) |>\n` +
+        `#   summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>\n` +
+        `#   collect() |> mutate(mean = sumwx / sumw)\n`;
       return s;
     }
     if (lang === "sql") {
-      return `-- ${hdr}\n-- duckdb\nINSTALL httpfs; LOAD httpfs;\n` +
+      return `-- ${hdr}\n${note}\n-- duckdb\nINSTALL httpfs; LOAD httpfs;\n` +
         `SET s3_endpoint='${EP}';\n` +
         `SET s3_url_style='path'; SET s3_region='';\n\n` +
         `SELECT date, SUM(sumwx) / SUM(sumw) AS mean_sst\n` +
         `FROM read_parquet('s3://${BK}/sums/${srcs[0]}/*.parquet')\n` +
-        `WHERE cell IN (\n${idLines(ids, "'", "  ")})\n` +
+        `WHERE date >= DATE '${since}'  -- remove for the full record\n` +
+        `  AND cell IN (\n${idLines(ids, "'", "  ")})\n` +
         `GROUP BY date ORDER BY date;\n` +
         (srcs.length === 2
           ? `-- repeat with sums/${srcs[1]} and join on date for the difference\n`
-          : "");
+          : "") +
+        `\n-- seasonal slice: the date is the FILENAME, so a glob prunes\n` +
+        `-- files before any bytes are read (every December, all years):\n` +
+        `--   FROM read_parquet('s3://${BK}/sums/${srcs[0]}/????-12-*.parquet')\n`;
     }
     const q3 = '"' + '"' + '"';
-    return `# ${hdr}\nimport duckdb\n\ncells = [\n${idLines(ids, '"', "    ")}]\n` +
+    return `# ${hdr}\n${note}\nimport duckdb\n\ncells = [\n${idLines(ids, '"', "    ")}]\n` +
       `con = duckdb.connect()\n` +
       `con.sql("INSTALL httpfs; LOAD httpfs")\n` +
       `con.sql("SET s3_endpoint='${EP}'; SET s3_url_style='path'; SET s3_region=''")\n\n` +
@@ -307,12 +332,16 @@ function build(srcName, meta, monthly, aux) {
       `    return con.sql(f${q3}\n` +
       `        SELECT date, SUM(sumwx) / SUM(sumw) AS mean_sst\n` +
       `        FROM read_parquet('s3://${BK}/sums/{src}/*.parquet')\n` +
-      `        WHERE cell IN ({ids}) GROUP BY date ORDER BY date${q3}).df()\n\n` +
+      `        WHERE date >= DATE '${since}'  -- remove for the full record\n` +
+      `          AND cell IN ({ids}) GROUP BY date ORDER BY date${q3}).df()\n\n` +
       (srcs.length === 2
         ? `g = read_region("ghrsst")\no = read_region("oisst")\n` +
           `d = g.merge(o, on="date", suffixes=("_g", "_o"))\n` +
           `d["diff"] = d.mean_sst_g - d.mean_sst_o\n`
-        : `d = read_region("${srcs[0]}")\n`);
+        : `d = read_region("${srcs[0]}")\n`) +
+      `\n# seasonal slice: the date is the FILENAME, so a glob prunes files\n` +
+      `# before any bytes are read (every December, all years):\n` +
+      `#   read_parquet('s3://${BK}/sums/${srcs[0]}/????-12-*.parquet')\n`;
   }
   function renderCode() {
     const wrap = $("#codewrap");
