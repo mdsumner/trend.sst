@@ -49,6 +49,12 @@
     border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px;
     font-size: 12.5px; display: none; z-index: 5;
     box-shadow: 0 2px 10px rgba(0,0,0,.12); font-variant-numeric: tabular-nums; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text-secondary);
+    padding: 4px 11px; font: inherit; cursor: pointer; }
+  .seg button.on { background: var(--surface-2); color: var(--text-primary);
+    font-weight: 600; }
   .err { background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 10px; padding: 16px; color: var(--text-secondary); }
 </style>
@@ -172,6 +178,11 @@ function build(srcName, meta, monthly, aux) {
       </div></div>
       <div class="panel">
         <h2 id="ptitle">Region series</h2>
+        <div id="pviewwrap" style="margin:4px 0 6px">
+          <span class="seg" id="pseg">
+            <button data-v="time" class="on">Time</button>
+            <button data-v="doy">Seasonal</button></span>
+        </div>
         <p class="note" id="pnote">Click cells on the globe; the monthly series
         of the union is an area-weighted combination of cell sums.</p>
         <svg id="pchart"></svg>
@@ -209,6 +220,15 @@ function build(srcName, meta, monthly, aux) {
 
   $("#cellsrc").value = srcName;
   $("#cellsrc").addEventListener("change", e => loadSource(e.target.value));
+
+  let panelView = "time";
+  if (srcName === "diff") $("#pviewwrap").style.display = "none";
+  $("#pseg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    panelView = b.dataset.v;
+    for (const x of $("#pseg").children) x.classList.toggle("on", x === b);
+    drawSeries();
+  });
 
   // Spilhaus: planar paths from PROJ-projected rings baked by the
   // exporter (sring, km). Absent sring (older data, seam cells) = hidden.
@@ -409,6 +429,9 @@ function build(srcName, meta, monthly, aux) {
     }
     series = series.filter(s => s.pts.length);
     if (!series.length) return;
+    if (panelView === "doy" && srcName !== "diff") {
+      drawSeasonal(svg2, w, h, series[0]); return;
+    }
     const all = series.flatMap(s => s.pts);
     const M = { t: 12, r: 52, b: 26, l: 42 };
     const x = d3.scaleTime().domain(d3.extent(all, p => p.d)).range([M.l, w - M.r]);
@@ -449,6 +472,71 @@ function build(srcName, meta, monthly, aux) {
                 ev.clientX, ev.clientY);
       })
       .on("mouseleave", () => { hair.style("display", "none"); hideTip(); });
+  }
+
+  // seasonal spaghetti (monthly resolution): every year gray, the
+  // current year emphasized -- the ClimateReanalyzer-style sanity view
+  // for ANY cell selection; the daily version for named regions is the
+  // status page's day-of-year view
+  function drawSeasonal(svg2, w, h, s) {
+    const pts = s.pts.map(p => ({ y: p.d.getFullYear(),
+                                  m: p.d.getMonth() + 1, v: p.v }));
+    const byYear = d3.group(pts, p => p.y);
+    const yrs = [...byYear.keys()].sort(d3.ascending);
+    const cur = yrs[yrs.length - 1];
+    const M = { t: 12, r: 46, b: 26, l: 42 };
+    const x = d3.scaleLinear().domain([1, 12]).range([M.l, w - M.r]);
+    const y = d3.scaleLinear().domain(d3.extent(pts, p => p.v)).nice()
+      .range([h - M.b, M.t]);
+    const ax = g => { g.selectAll("path,line").attr("stroke", css("--grid"));
+      g.selectAll("text").attr("fill", css("--text-secondary")).attr("font-size", 11); };
+    svg2.append("g").attr("transform", `translate(0,${h - M.b})`)
+      .call(d3.axisBottom(x).ticks(12)
+        .tickFormat(m => "JFMAMJJASOND"[m - 1]).tickSizeOuter(0)).call(ax);
+    svg2.append("g").attr("transform", `translate(${M.l},0)`)
+      .call(d3.axisLeft(y).ticks(5).tickSize(-(w - M.l - M.r)).tickSizeOuter(0))
+      .call(ax).call(g => g.selectAll(".tick line").attr("opacity", .5));
+    const line = d3.line().x(p => x(p.m)).y(p => y(p.v));
+    for (const yr of yrs) if (yr !== cur) {
+      svg2.append("path").attr("d", line(byYear.get(yr))).attr("fill", "none")
+        .attr("stroke", css("--text-muted")).attr("stroke-opacity", .35)
+        .attr("stroke-width", 1).attr("class", "pghost").attr("data-year", yr);
+    }
+    const cp = byYear.get(cur);
+    svg2.append("path").attr("d", line(cp)).attr("fill", "none")
+      .attr("stroke", s.col).attr("stroke-width", 2.2);
+    const lp = cp[cp.length - 1];
+    svg2.append("text").attr("x", x(lp.m) + 5).attr("y", y(lp.v))
+      .attr("dominant-baseline", "middle").attr("font-size", 11)
+      .attr("font-weight", 650).attr("fill", s.col).text(cur);
+    svg2.append("rect").attr("x", M.l).attr("y", M.t)
+      .attr("width", w - M.l - M.r).attr("height", h - M.t - M.b)
+      .attr("fill", "transparent")
+      .on("mousemove", ev => {
+        const [px, py] = d3.pointer(ev);
+        const mo = Math.max(1, Math.min(12, Math.round(x.invert(px))));
+        let best = null;
+        for (const yr of yrs) {
+          const p = byYear.get(yr).find(q => q.m === mo);
+          if (p && (!best || Math.abs(y(p.v) - py) < Math.abs(y(best.p.v) - py)))
+            best = { yr, p };
+        }
+        svg2.selectAll(".pghost").attr("stroke-opacity", .35)
+          .attr("stroke", css("--text-muted")).attr("stroke-width", 1);
+        if (best) {
+          if (best.yr !== cur)
+            svg2.selectAll(`.pghost[data-year="${best.yr}"]`)
+              .attr("stroke", css("--text-secondary")).attr("stroke-opacity", .9)
+              .attr("stroke-width", 1.6);
+          showTip(`<b>${best.yr}</b> month ${best.p.m}<br>${best.p.v.toFixed(2)} C`,
+                  ev.clientX, ev.clientY);
+        }
+      })
+      .on("mouseleave", () => {
+        svg2.selectAll(".pghost").attr("stroke-opacity", .35)
+          .attr("stroke-width", 1);
+        hideTip();
+      });
   }
 
   restyle(); render(); drawSeries();
