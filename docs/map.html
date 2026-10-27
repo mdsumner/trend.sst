@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trend.sst - cell explorer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson-client/3.1.0/topojson-client.min.js"></script>
 <style>
   .viz-root {
     color-scheme: light;
@@ -94,7 +95,8 @@ const DATA = {};
 // UI state survives source switches: selection travels by cell ID
 const UI = { metric: "trend", view: "ortho", panelView: "time",
              selIds: [], selLabel: null, regionKey: "",
-             rotate: [155, 10], scale: null, pan: { x: 0, y: 0, k: 1 } };
+             rotate: [155, 10], scale: null, pan: { x: 0, y: 0, k: 1 },
+             coast: false };
 function fetchSource(src) {
   if (DATA[src]) return Promise.resolve(DATA[src]);
   return Promise.all([
@@ -167,6 +169,7 @@ function build(srcName, meta, monthly, aux) {
         <option value="spilhaus">Spilhaus</option>
         <option value="faces">Cube net</option>
       </select></label>
+      <label><input type="checkbox" id="coast"> Coastline</label>
       <label>Color by <select id="metric">
         ${Object.entries(MET).map(([k, m]) =>
           `<option value="${k}">${m.label}</option>`).join("")}
@@ -279,8 +282,12 @@ function build(srcName, meta, monthly, aux) {
       default: return [-y / z, -x / z];
     }
   };
-  const FS = (size - 48) / 3, FM = 24;
-  const faceXY = f => [FM + (f % 3) * FS, FM + Math.floor(f / 3) * (FS + 8)];
+  // S2 staircase net: 0,1 bottom-left rising to 4,5 top-right; with
+  // each face in native uv orientation every staircase seam is
+  // edge-continuous (no rotations) -- the coastline proves it
+  const FS = (size - 32) / 4, FM = 16;
+  const FPOS = [[0, 2], [1, 2], [1, 1], [2, 1], [2, 0], [3, 0]];
+  const faceXY = f => [FM + FPOS[f][0] * FS, FM + FPOS[f][1] * FS];
   const fcPaths = cells.map(c => {
     const f = faceOf(c.id), o = faceXY(f);
     const pts = c.ring.map(([lon, lat]) => {
@@ -306,6 +313,56 @@ function build(srcName, meta, monthly, aux) {
     ffg.append("text").attr("x", o[0] + 4).attr("y", o[1] + 12)
       .attr("font-size", 10).attr("fill", css("--text-muted"))
       .text("face " + f);
+  }
+
+  // coastline overlay (context only, never interactive); drawn by d3 on
+  // the globe, by per-face gnomonic projection on the net (polylines
+  // split at face changes); not available in Spilhaus (rings are baked
+  // server-side and no browser spilhaus projection exists here)
+  const coastP = root.append("path").attr("fill", "none")
+    .attr("stroke-width", .7).style("pointer-events", "none")
+    .style("display", "none");
+  let landMesh = null, coastNetD = null;
+  function facesCoast(mesh) {
+    const out = [];
+    for (const line of mesh.coordinates) {
+      let cur = -1, pts = [];
+      for (const [lon, lat] of line) {
+        const cl = Math.cos(lat * Math.PI / 180);
+        const x = cl * Math.cos(lon * Math.PI / 180),
+              y = cl * Math.sin(lon * Math.PI / 180),
+              z = Math.sin(lat * Math.PI / 180);
+        const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+        const fc = ax >= ay && ax >= az ? (x > 0 ? 0 : 3)
+                 : ay >= az ? (y > 0 ? 1 : 4) : (z > 0 ? 2 : 5);
+        if (fc !== cur) {
+          if (pts.length > 1) out.push("M" + pts.join("L"));
+          pts = []; cur = fc;
+        }
+        const uv = uvOf(fc, x, y, z), o = faceXY(fc);
+        pts.push((o[0] + (uv[0] + 1) / 2 * FS).toFixed(1) + "," +
+                 (o[1] + (1 - uv[1]) / 2 * FS).toFixed(1));
+      }
+      if (pts.length > 1) out.push("M" + pts.join("L"));
+    }
+    return out.join("");
+  }
+  function updateCoast() {
+    if (!UI.coast || view === "spilhaus") {
+      coastP.style("display", "none"); return;
+    }
+    if (!landMesh) {
+      d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json")
+        .then(w => {
+          landMesh = topojson.mesh(w, w.objects.land);
+          coastNetD = facesCoast(landMesh);
+          updateCoast();
+        }).catch(() => {});
+      return;
+    }
+    coastP.style("display", null)
+      .attr("stroke", css("--text-secondary")).attr("stroke-opacity", .75)
+      .attr("d", view === "ortho" ? path(landMesh) : coastNetD);
   }
   const grat = root.append("path")
     .datum(d3.geoGraticule10())
@@ -382,6 +439,7 @@ function build(srcName, meta, monthly, aux) {
       cellP.style("display", f => planar[f.idx] ? null : "none")
         .attr("d", f => planar[f.idx]);
     }
+    updateCoast();
   }
 
   function drawRamp() {
@@ -434,6 +492,10 @@ function build(srcName, meta, monthly, aux) {
 
   $("#view").value = view;
   $("#metric").value = metric;
+  $("#coast").checked = UI.coast;
+  $("#coast").addEventListener("change", e => {
+    UI.coast = e.target.checked; updateCoast();
+  });
   $("#view").addEventListener("change", e => {
     view = UI.view = e.target.value;
     pan.x = 0; pan.y = 0; pan.k = 1;
