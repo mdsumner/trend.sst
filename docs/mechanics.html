@@ -28,8 +28,11 @@
   .wrap { max-width: 980px; margin: 0 auto; }
   header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
   h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; }
-  nav a { color: var(--series-1); text-decoration: none; font-size: 13px;
-          margin-right: 12px; }
+  nav { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  nav a { color: var(--series-1); text-decoration: none; font-size: 12.5px;
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-2); white-space: nowrap; }
+  nav a:hover { border-color: var(--series-1); }
   .sub { color: var(--text-secondary); font-size: 13px; margin: 2px 0 20px; }
   h2 { font-size: 15px; font-weight: 650; margin: 26px 0 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 13px;
@@ -55,7 +58,7 @@
 <div class="viz-root"><div class="wrap">
 <header>
   <h1>trend.sst mechanics</h1>
-  <nav><a href="index.html">store status</a><a href="map.html">cell explorer</a></nav>
+  <nav><a href="index.html">store status</a> <a href="map.html">cell explorer</a> <a href="https://australianantarcticdivision.github.io/ghrsst-cogger/">COG pipeline</a></nav>
 </header>
 <p class="sub">The pipeline ledger: what the bucket actually holds
 (<span class="mono">manifest.json</span>, written by the backfill host at push
