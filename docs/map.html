@@ -269,7 +269,12 @@ function build(srcName, meta, monthly, aux) {
       "object storage. The full record is ~9,000 files per source, so",
       "an unfiltered read takes minutes; the date filter below keeps",
       "the default quick. (The website itself reads small baked",
-      "monthly JSON derived from these sums -- downstream, hence fast.)"
+      "monthly JSON derived from these sums -- downstream, hence fast.)",
+      "For intensive work, bulk-sync the sums first and query locally:",
+      "  rclone copy :s3,provider=Ceph,endpoint=https://" + EP +
+        ":" + BK + "/sums/ sums/",
+      "The source MUR COGs are public too (pixel-level work):",
+      "  s3://us-west-2.opendata.source.coop/ausantarctic/ghrsst-mur-v2/"
     ].map(l => cc + l).join("\n");
     const since = new Date(Date.now() - 3 * 31557600000)
       .toISOString().slice(0, 10);
