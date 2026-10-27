@@ -82,50 +82,7 @@ jsonlite::write_json(list(regions = region_labels, sources = series),
                      auto_unbox = TRUE, digits = NA, na = "null")
 message(sprintf("series.json written (%i regions)", length(region_labels)))
 
-## ------------------------------------------------- cells (OISST, warm-up)
-p <- paths$oisst
-YEARS <- 1982:2025
-d0 <- as.Date(sprintf("%i-01-01", min(YEARS)))
-d1 <- as.Date(sprintf("%i-12-31", max(YEARS)))
-
-percell <- arrow::open_dataset(p) |>
-  filter(date >= d0, date <= d1) |>
-  group_by(cell) |>
-  summarise(n = sum(n), sumw = sum(sumw), sumwx = sum(sumwx)) |>
-  collect() |>
-  mutate(mean = sumwx / sumw, w = sumw / n)   # w: mean per-day cell weight
-
-ann <- arrow::open_dataset(p) |>
-  filter(date >= d0, date <= d1) |>
-  mutate(year = lubridate::year(date)) |>
-  group_by(cell, year) |>
-  summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
-  collect() |> mutate(m = sumwx / sumw)
-trend <- ann |> group_by(cell) |>
-  summarise(trend = if (dplyr::n() > 0.8 * length(YEARS))
-    coef(lm(m ~ year))[2] * 10 else NA_real_, .groups = "drop")
-
-last_d <- max(as.Date(gsub("\\.parquet$", "", list.files(p, "\\.parquet$"))))
-a0 <- last_d - 364
-recent <- arrow::open_dataset(p) |>
-  filter(date >= a0) |>
-  group_by(cell) |>
-  summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
-  collect() |> mutate(recent = sumwx / sumw)
-base <- arrow::open_dataset(p) |>
-  filter(date >= as.Date("1982-01-01"), date <= as.Date("2011-12-31")) |>
-  group_by(cell) |>
-  summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
-  collect() |> mutate(base = sumwx / sumw)
-
-percell <- percell |>
-  left_join(trend, by = "cell") |>
-  left_join(recent[c("cell", "recent")], by = "cell") |>
-  left_join(base[c("cell", "base")], by = "cell") |>
-  mutate(anom = recent - base) |>
-  inner_join(reg[c("cell", "lon", "lat")], by = "cell") |>
-  arrange(cell)
-
+## ---------------------------------------------- per-source cell exports
 ## slerp-densified ring per cell (edges are great-circle arcs)
 xyz <- function(lon, lat) c(cos(lat * pi/180) * cos(lon * pi/180),
                             cos(lat * pi/180) * sin(lon * pi/180),
@@ -146,20 +103,15 @@ ring_of <- function(cell) {
               asin(pmax(-1, pmin(1, pts[, 3]))) * 180/pi)
   round(ll[!duplicated(round(ll, 5)), , drop = FALSE], 2)
 }
-rings <- lapply(percell$cell, ring_of)
-message(sprintf("%i cell rings built", length(rings)))
-
-## Spilhaus rendering of the same rings, via PROJ (+proj=spilhaus needs
-## PROJ >= 9.6). Optional: silently absent if the local PROJ lacks it,
-## and cells straddling the projection's seams are culled (the cuts run
-## through land, so only a handful of coastal/Bering cells are lost).
-spil <- tryCatch({
+## Spilhaus rendering via PROJ (+proj=spilhaus needs PROJ >= 9.6);
+## silently absent on older PROJ, seam-straddling cells culled
+spil_of <- function(rings) tryCatch({
   s <- lapply(rings, function(r) {
     xy <- reproj::reproj_xy(r, "+proj=spilhaus", source = "EPSG:4326")
     if (!all(is.finite(xy))) return(NULL)
     seg <- sqrt(diff(xy[, 1])^2 + diff(xy[, 2])^2)
     if (max(seg) > 2e6) return(NULL)
-    round(xy / 1000, 1)   # km for compact json
+    round(xy / 1000, 1)
   })
   ok <- !vapply(s, is.null, TRUE)
   if (!any(ok)) NULL else {
@@ -169,42 +121,97 @@ spil <- tryCatch({
   }
 }, error = function(e) { message("spilhaus unavailable: ", conditionMessage(e)); NULL })
 
-cells_out <- lapply(seq_len(nrow(percell)), function(i) {
-  out <- list(id = percell$cell[i], ring = rings[[i]],
-       mean = round(percell$mean[i], 2), trend = round(percell$trend[i], 3),
-       anom = round(percell$anom[i], 2), w = round(percell$w[i], 1),
-       lon = round(percell$lon[i], 2), lat = round(percell$lat[i], 2))
-  if (!is.null(spil) && !is.null(spil[[i]])) out$sring <- spil[[i]]
-  out
-})
+## full years only; baseline is each source's own convention
+cell_cfg <- list(oisst = list(years = 1982:2025, baseline = c(1982, 2011)),
+                 ghrsst = list(years = 2003:2025, baseline = c(2003, 2022)))
 
-## ------------------------------------------- monthly matrix (cell-major)
-mon <- arrow::open_dataset(p) |>
-  filter(date >= d0) |>
-  mutate(ym = lubridate::year(date) * 100L + lubridate::month(date)) |>
-  group_by(cell, ym) |>
-  summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
-  collect() |> mutate(m = sumwx / sumw)
-yms <- sort(unique(mon$ym))
-nm <- length(yms)
-mat <- matrix(NaN, nrow(percell), nm)
-mat[cbind(match(mon$cell, percell$cell), match(mon$ym, yms))] <- mon$m
-con <- file(file.path(out, "monthly.bin"), "wb")
-writeBin(as.numeric(t(mat)), con, size = 4, endian = "little")
-close(con)
-message(sprintf("monthly.bin: %i cells x %i months", nrow(mat), nm))
+for (src in names(paths)) {
+  cfg <- cell_cfg[[src]]
+  if (is.null(cfg)) next
+  p <- paths[[src]]
+  YEARS <- cfg$years
+  d0 <- as.Date(sprintf("%i-01-01", min(YEARS)))
+  d1 <- as.Date(sprintf("%i-12-31", max(YEARS)))
 
-## the named regions as pre-selected cell sets (0-based indices into
-## cells); the map's presets and the series regions are the same objects
-region_sets <- Map(function(lab, cc) {
-  ix <- if (is.null(cc)) seq_len(nrow(percell)) - 1L
-        else which(percell$cell %in% cc) - 1L
-  list(label = lab, cells = ix)
-}, region_labels, region_cells[names(region_labels)])
+  percell <- arrow::open_dataset(p) |>
+    filter(date >= d0, date <= d1) |>
+    group_by(cell) |>
+    summarise(n = sum(n), sumw = sum(sumw), sumwx = sum(sumwx)) |>
+    collect() |>
+    mutate(mean = sumwx / sumw, w = sumw / n)   # w: mean per-day cell weight
 
-jsonlite::write_json(
-  list(source = "oisst", years = range(YEARS),
-       months = sprintf("%04i-%02i", yms %/% 100L, yms %% 100L),
-       baseline = "1982-2011", regions = region_sets, cells = cells_out),
-  file.path(out, "cells.json"), auto_unbox = TRUE, digits = NA, na = "null")
-message("cells.json written")
+  ann <- arrow::open_dataset(p) |>
+    filter(date >= d0, date <= d1) |>
+    mutate(year = lubridate::year(date)) |>
+    group_by(cell, year) |>
+    summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
+    collect() |> mutate(m = sumwx / sumw)
+  trend <- ann |> group_by(cell) |>
+    summarise(trend = if (dplyr::n() > 0.8 * length(YEARS))
+      coef(lm(m ~ year))[2] * 10 else NA_real_, .groups = "drop")
+
+  last_d <- max(as.Date(gsub("\\.parquet$", "", list.files(p, "\\.parquet$"))))
+  a0 <- last_d - 364
+  recent <- arrow::open_dataset(p) |>
+    filter(date >= a0) |>
+    group_by(cell) |>
+    summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
+    collect() |> mutate(recent = sumwx / sumw)
+  b0 <- as.Date(sprintf("%i-01-01", cfg$baseline[1]))
+  b1 <- as.Date(sprintf("%i-12-31", cfg$baseline[2]))
+  base <- arrow::open_dataset(p) |>
+    filter(date >= b0, date <= b1) |>
+    group_by(cell) |>
+    summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
+    collect() |> mutate(base = sumwx / sumw)
+
+  percell <- percell |>
+    left_join(trend, by = "cell") |>
+    left_join(recent[c("cell", "recent")], by = "cell") |>
+    left_join(base[c("cell", "base")], by = "cell") |>
+    mutate(anom = recent - base) |>
+    inner_join(reg[c("cell", "lon", "lat")], by = "cell") |>
+    arrange(cell)
+
+  rings <- lapply(percell$cell, ring_of)
+  message(sprintf("[%s] %i cell rings built", src, length(rings)))
+  spil <- spil_of(rings)
+
+  cells_out <- lapply(seq_len(nrow(percell)), function(i) {
+    o <- list(id = percell$cell[i], ring = rings[[i]],
+         mean = round(percell$mean[i], 2), trend = round(percell$trend[i], 3),
+         anom = round(percell$anom[i], 2), w = round(percell$w[i], 1),
+         lon = round(percell$lon[i], 2), lat = round(percell$lat[i], 2))
+    if (!is.null(spil) && !is.null(spil[[i]])) o$sring <- spil[[i]]
+    o
+  })
+
+  mon <- arrow::open_dataset(p) |>
+    filter(date >= d0) |>
+    mutate(ym = lubridate::year(date) * 100L + lubridate::month(date)) |>
+    group_by(cell, ym) |>
+    summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>
+    collect() |> mutate(m = sumwx / sumw)
+  yms <- sort(unique(mon$ym))
+  mat <- matrix(NaN, nrow(percell), length(yms))
+  mat[cbind(match(mon$cell, percell$cell), match(mon$ym, yms))] <- mon$m
+  con <- file(file.path(out, sprintf("monthly-%s.bin", src)), "wb")
+  writeBin(as.numeric(t(mat)), con, size = 4, endian = "little")
+  close(con)
+  message(sprintf("monthly-%s.bin: %i cells x %i months", src, nrow(mat), length(yms)))
+
+  region_sets <- Map(function(lab, cc) {
+    ix <- if (is.null(cc)) seq_len(nrow(percell)) - 1L
+          else which(percell$cell %in% cc) - 1L
+    list(label = lab, cells = ix)
+  }, region_labels, region_cells[names(region_labels)])
+
+  jsonlite::write_json(
+    list(source = src, years = range(YEARS),
+         months = sprintf("%04i-%02i", yms %/% 100L, yms %% 100L),
+         baseline = paste(cfg$baseline, collapse = "-"),
+         regions = region_sets, cells = cells_out),
+    file.path(out, sprintf("cells-%s.json", src)),
+    auto_unbox = TRUE, digits = NA, na = "null")
+  message(sprintf("cells-%s.json written", src))
+}

@@ -10,7 +10,7 @@
     color-scheme: light;
     --surface-1: #fcfcfb; --surface-2: #f0efec;
     --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
-    --series-1: #2a78d6; --grid: #e4e3de; --border: #d8d7d0;
+    --series-1: #2a78d6; --series-2: #eb6834; --grid: #e4e3de; --border: #d8d7d0;
     --div-mid: #f0efec;
   }
   @media (prefers-color-scheme: dark) {
@@ -18,7 +18,7 @@
       color-scheme: dark;
       --surface-1: #1a1a19; --surface-2: #262624;
       --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
-      --series-1: #3987e5; --grid: #32322f; --border: #3d3d39;
+      --series-1: #3987e5; --series-2: #d95926; --grid: #32322f; --border: #3d3d39;
       --div-mid: #383835;
     }
   }
@@ -57,7 +57,7 @@
 <div class="viz-root"><div class="wrap">
 <header><h1>trend.sst cell explorer</h1>
   <nav><a href="index.html">store status</a> <a href="mechanics.html">mechanics</a></nav></header>
-<p class="sub">Level-5 S2 cells over the OISST record. Drag to rotate, wheel to
+<p class="sub">Level-5 S2 cells per source, or their difference. Drag to rotate, wheel to
 zoom, click cells to build a region; its series is computed from the cell sums
 in your browser.</p>
 <div id="app"><div class="err">Loading data/cells.json ...</div></div>
@@ -74,19 +74,65 @@ const hideTip = () => tip.style.display = "none";
 
 const BLUE = ["#cde2fb","#9ec5f4","#6da7ec","#3987e5","#256abf","#184f95","#0d366b"];
 const METRICS = {
-  trend: { label: "Trend (C/decade, 1982-2025)", lim: 0.6, type: "div", fmt: v => v.toFixed(2) },
-  anom:  { label: "Last 12 months vs 1982-2011 (C)", lim: 1.5, type: "div", fmt: v => v.toFixed(2) },
-  mean:  { label: "Mean SST (C, 1982-2025)", type: "seq", fmt: v => v.toFixed(1) }
+  trend: { label: "Trend (C/decade)", lim: 0.6, type: "div", fmt: v => v.toFixed(2) },
+  anom:  { label: "Last 12 months vs baseline (C)", lim: 1.5, type: "div", fmt: v => v.toFixed(2) },
+  mean:  { label: "Mean SST (C)", type: "seq", fmt: v => v.toFixed(1) }
+};
+const DIFF_METRICS = {
+  trend: { label: "Trend difference (C/decade)", lim: 0.2, type: "div", fmt: v => v.toFixed(3) },
+  anom:  { label: "12-month anomaly difference (C)", lim: 0.5, type: "div", fmt: v => v.toFixed(2) },
+  mean:  { label: "Mean difference (C)", lim: 1, type: "div", fmt: v => v.toFixed(2) }
 };
 
-Promise.all([
-  fetch("data/cells.json").then(r => r.ok ? r.json() : Promise.reject("cells.json")),
-  fetch("data/monthly.bin").then(r => r.ok ? r.arrayBuffer() : Promise.reject("monthly.bin"))
-]).then(([meta, buf]) => build(meta, new Float32Array(buf)))
-  .catch(e => $("#app").innerHTML =
-    `<div class="err">Could not load ${e}. Run data-raw/export_site.R and commit docs/data/.</div>`);
+const DATA = {};
+function fetchSource(src) {
+  if (DATA[src]) return Promise.resolve(DATA[src]);
+  return Promise.all([
+    fetch(`data/cells-${src}.json`).then(r => r.ok ? r.json() : Promise.reject(`cells-${src}.json`)),
+    fetch(`data/monthly-${src}.bin`).then(r => r.ok ? r.arrayBuffer() : Promise.reject(`monthly-${src}.bin`))
+  ]).then(([meta, buf]) => (DATA[src] = { meta, monthly: new Float32Array(buf) }));
+}
+const fail = e => $("#app").innerHTML =
+  `<div class="err">Could not load ${e}. Run data-raw/export_site.R and commit docs/data/.</div>`;
+function loadSource(sel) {
+  if (sel === "diff") {
+    Promise.all([fetchSource("ghrsst"), fetchSource("oisst")])
+      .then(([g, o]) => build("diff", diffMeta(g.meta, o.meta), null, { g, o }))
+      .catch(fail);
+  } else {
+    fetchSource(sel).then(d => build(sel, d.meta, d.monthly, null)).catch(fail);
+  }
+}
+// shared cells only; every metric becomes GHRSST - OISST
+function diffMeta(mg, mo) {
+  const io = new Map(mo.cells.map((c, i) => [c.id, i]));
+  const cells = [];
+  mg.cells.forEach((c, ig) => {
+    const i = io.get(c.id);
+    if (i == null) return;
+    const co = mo.cells[i];
+    const d = { id: c.id, ring: c.ring, lon: c.lon, lat: c.lat,
+      ig, io: i, wg: c.w, wo: co.w,
+      mean: +(c.mean - co.mean).toFixed(2),
+      trend: c.trend != null && co.trend != null
+        ? +(c.trend - co.trend).toFixed(3) : null,
+      anom: c.anom != null && co.anom != null
+        ? +(c.anom - co.anom).toFixed(2) : null };
+    if (c.sring) d.sring = c.sring;
+    cells.push(d);
+  });
+  const dix = new Map(cells.map((c, i) => [c.id, i]));
+  const regions = {};
+  for (const [k, r] of Object.entries(mg.regions || {})) {
+    regions[k] = { label: r.label,
+      cells: r.cells.map(i => dix.get(mg.cells[i].id)).filter(i => i != null) };
+  }
+  return { source: "diff", months: mg.months, regions, cells };
+}
+loadSource("ghrsst");
 
-function build(meta, monthly) {
+function build(srcName, meta, monthly, aux) {
+  const MET = srcName === "diff" ? DIFF_METRICS : METRICS;
   const cells = meta.cells, nm = meta.months.length;
   const feats = cells.map((c, i) => {
     const f = { type: "Feature", idx: i,
@@ -101,12 +147,17 @@ function build(meta, monthly) {
 
   $("#app").innerHTML = `
     <div class="controls">
+      <label>Source <select id="cellsrc">
+        <option value="ghrsst">GHRSST</option>
+        <option value="oisst">OISST</option>
+        <option value="diff">GHRSST - OISST</option>
+      </select></label>
       <label>View <select id="view">
         <option value="ortho">Globe</option>
         <option value="spilhaus">Spilhaus</option>
       </select></label>
       <label>Color by <select id="metric">
-        ${Object.entries(METRICS).map(([k, m]) =>
+        ${Object.entries(MET).map(([k, m]) =>
           `<option value="${k}">${m.label}</option>`).join("")}
       </select></label>
       <label id="regwrap">Region <select id="regionsel">
@@ -156,6 +207,9 @@ function build(meta, monthly) {
     });
   } else $("#regwrap").style.display = "none";
 
+  $("#cellsrc").value = srcName;
+  $("#cellsrc").addEventListener("change", e => loadSource(e.target.value));
+
   // Spilhaus: planar paths from PROJ-projected rings baked by the
   // exporter (sring, km). Absent sring (older data, seam cells) = hidden.
   const hasSpil = cells.some(c => c.sring);
@@ -188,7 +242,7 @@ function build(meta, monthly) {
     .attr("stroke-width", .5)
     .attr("vector-effect", "non-scaling-stroke")
     .on("mousemove", (ev, f) => {
-      const c = cells[f.idx], m = METRICS[metric];
+      const c = cells[f.idx], m = MET[metric];
       const v = c[metric];
       showTip(`<b>${c.id}</b> (${c.lat}, ${c.lon})<br>` +
         `${m.label}: ${v == null ? "-" : m.fmt(v)}<br>` +
@@ -213,7 +267,7 @@ function build(meta, monthly) {
   }
 
   function colorOf(c) {
-    const m = METRICS[metric], v = c[metric], R = ramps();
+    const m = MET[metric], v = c[metric], R = ramps();
     if (v == null || !isFinite(v)) return css("--surface-2");
     if (m.type === "div") {
       const t = Math.max(-1, Math.min(1, v / m.lim)) / 2 + .5;
@@ -252,7 +306,7 @@ function build(meta, monthly) {
   }
 
   function drawRamp() {
-    const cv = $("#ramp"), cx = cv.getContext("2d"), m = METRICS[metric], R = ramps();
+    const cv = $("#ramp"), cx = cv.getContext("2d"), m = MET[metric], R = ramps();
     for (let i = 0; i < 180; i++) {
       cx.fillStyle = m.type === "div" ? R.div(i / 179)
         : R.seq(i / 179);
@@ -307,10 +361,15 @@ function build(meta, monthly) {
     sel.clear(); selLabel = null; regionsel.value = "";
     restyle(); drawSeries();
   });
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
-    () => { restyle(); drawSeries(); });
+  window._mapRedraw = () => { restyle(); drawSeries(); };
+  if (!window._mapMM) {
+    window._mapMM = true;
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
+      () => window._mapRedraw());
+  }
 
-  // region series: area-weighted combination of cell monthly means
+  // region series from cell sums: one line per source (diff mode
+  // overlays both), area-weighted combination computed client-side
   function drawSeries() {
     const svg2 = d3.select("#pchart"); svg2.selectAll("*").remove();
     const w = Math.min(520, $(".panel").clientWidth), h = 300;
@@ -319,18 +378,41 @@ function build(meta, monthly) {
     $("#ptitle").textContent = `Region series (${selLabel ? selLabel + ", " : ""}` +
       `${sel.size} cell${sel.size > 1 ? "s" : ""})`;
     const idx = [...sel];
-    const pts = [];
-    for (let m = 0; m < nm; m++) {
-      let sw = 0, swx = 0;
-      for (const i of idx) {
-        const v = monthly[i * nm + m];
-        if (isFinite(v)) { const wi = cells[i].w; sw += wi; swx += wi * v; }
+    const mkpts = (mn, months, getV, getW) => {
+      const pts = [];
+      for (let m = 0; m < mn; m++) {
+        let sw = 0, swx = 0;
+        for (const i of idx) {
+          const v = getV(i, m);
+          if (isFinite(v)) { const wi = getW(i); sw += wi; swx += wi * v; }
+        }
+        if (sw > 0) pts.push({ d: new Date(months[m] + "-15"), v: swx / sw });
       }
-      if (sw > 0) pts.push({ d: new Date(meta.months[m] + "-15"), v: swx / sw });
+      return pts;
+    };
+    let series;
+    if (srcName === "diff") {
+      const nmG = aux.g.meta.months.length, nmO = aux.o.meta.months.length;
+      series = [
+        { label: "GHRSST", col: css("--series-2"),
+          pts: mkpts(nmG, aux.g.meta.months,
+                     (i, m) => aux.g.monthly[cells[i].ig * nmG + m],
+                     i => cells[i].wg) },
+        { label: "OISST", col: css("--series-1"),
+          pts: mkpts(nmO, aux.o.meta.months,
+                     (i, m) => aux.o.monthly[cells[i].io * nmO + m],
+                     i => cells[i].wo) }];
+    } else {
+      series = [{ label: null, col: css("--series-1"),
+        pts: mkpts(nm, meta.months, (i, m) => monthly[i * nm + m],
+                   i => cells[i].w) }];
     }
-    const M = { t: 12, r: 12, b: 26, l: 42 };
-    const x = d3.scaleTime().domain(d3.extent(pts, p => p.d)).range([M.l, w - M.r]);
-    const y = d3.scaleLinear().domain(d3.extent(pts, p => p.v)).nice()
+    series = series.filter(s => s.pts.length);
+    if (!series.length) return;
+    const all = series.flatMap(s => s.pts);
+    const M = { t: 12, r: 52, b: 26, l: 42 };
+    const x = d3.scaleTime().domain(d3.extent(all, p => p.d)).range([M.l, w - M.r]);
+    const y = d3.scaleLinear().domain(d3.extent(all, p => p.v)).nice()
       .range([h - M.b, M.t]);
     const ax = g => { g.selectAll("path,line").attr("stroke", css("--grid"));
       g.selectAll("text").attr("fill", css("--text-secondary")).attr("font-size", 11); };
@@ -339,10 +421,17 @@ function build(meta, monthly) {
     svg2.append("g").attr("transform", `translate(${M.l},0)`)
       .call(d3.axisLeft(y).ticks(5).tickSize(-(w - M.l - M.r)).tickSizeOuter(0))
       .call(ax).call(g => g.selectAll(".tick line").attr("opacity", .5));
-    svg2.append("path")
-      .attr("d", d3.line().x(p => x(p.d)).y(p => y(p.v))(pts))
-      .attr("fill", "none").attr("stroke", css("--series-1"))
-      .attr("stroke-width", 1.8);
+    const line = d3.line().x(p => x(p.d)).y(p => y(p.v));
+    for (const s of series) {
+      svg2.append("path").attr("d", line(s.pts)).attr("fill", "none")
+        .attr("stroke", s.col).attr("stroke-width", 1.8);
+      if (s.label) {
+        const lp = s.pts[s.pts.length - 1];
+        svg2.append("text").attr("x", x(lp.d) + 4).attr("y", y(lp.v))
+          .attr("dominant-baseline", "middle").attr("font-size", 11)
+          .attr("font-weight", 600).attr("fill", s.col).text(s.label);
+      }
+    }
     const hair = svg2.append("line").attr("y1", M.t).attr("y2", h - M.b)
       .attr("stroke", css("--text-muted")).attr("stroke-dasharray", "3 3")
       .style("display", "none");
@@ -351,11 +440,13 @@ function build(meta, monthly) {
       .attr("fill", "transparent")
       .on("mousemove", ev => {
         const d0 = x.invert(d3.pointer(ev)[0]);
-        const p = pts[d3.bisector(q => q.d).center(pts, d0)];
-        if (!p) return;
-        hair.attr("x1", x(p.d)).attr("x2", x(p.d)).style("display", null);
-        showTip(`<b>${d3.timeFormat("%Y-%m")(p.d)}</b><br>${p.v.toFixed(2)} C`,
-          ev.clientX, ev.clientY);
+        hair.attr("x1", x(d0)).attr("x2", x(d0)).style("display", null);
+        const rows = series.map(s => {
+          const p = s.pts[d3.bisector(q => q.d).center(s.pts, d0)];
+          return `${s.label ? s.label + " " : ""}${p ? p.v.toFixed(2) + " C" : "-"}`;
+        }).join("<br>");
+        showTip(`<b>${d3.timeFormat("%Y-%m")(d0)}</b><br>${rows}`,
+                ev.clientX, ev.clientY);
       })
       .on("mouseleave", () => { hair.style("display", "none"); hideTip(); });
   }
