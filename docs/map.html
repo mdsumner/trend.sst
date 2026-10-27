@@ -56,6 +56,10 @@
     padding: 4px 11px; font: inherit; cursor: pointer; }
   .seg button.on { background: var(--surface-2); color: var(--text-primary);
     font-weight: 600; }
+  pre#codebox { background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; margin: 0;
+    font: 11.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    overflow: auto; max-height: 280px; }
   .err { background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 10px; padding: 16px; color: var(--text-secondary); }
 </style>
@@ -96,7 +100,7 @@ const DATA = {};
 const UI = { metric: "trend", view: "ortho", panelView: "time",
              selIds: [], selLabel: null, regionKey: "",
              rotate: [155, 10], scale: null, pan: { x: 0, y: 0, k: 1 },
-             coast: false };
+             coast: false, codeLang: "r" };
 function fetchSource(src) {
   if (DATA[src]) return Promise.resolve(DATA[src]);
   return Promise.all([
@@ -194,6 +198,17 @@ function build(srcName, meta, monthly, aux) {
         <p class="note" id="pnote">Click cells on the globe; the monthly series
         of the union is an area-weighted combination of cell sums.</p>
         <svg id="pchart"></svg>
+        <div id="codewrap" style="display:none; margin-top:10px">
+          <div class="controls" style="margin:0 0 6px">
+            <span class="seg" id="cseg">
+              <button data-l="r">R</button>
+              <button data-l="sql">SQL</button>
+              <button data-l="py">Python</button></span>
+            <button class="btn" id="copycode">Copy</button>
+            <span id="codemeta" style="font-size:12px"></span>
+          </div>
+          <pre id="codebox"></pre>
+        </div>
       </div>
     </div>`;
 
@@ -233,6 +248,92 @@ function build(srcName, meta, monthly, aux) {
 
   $("#cellsrc").value = srcName;
   $("#cellsrc").addEventListener("change", e => loadSource(e.target.value));
+
+  // "Get the data": runnable code for the current selection against the
+  // public bucket -- the explorer doubles as a query builder
+  const EP = "projects.pawsey.org.au", BK = "aad-derived/trend-sst";
+  function idLines(ids, q, ind) {
+    const o = [];
+    for (let i = 0; i < ids.length; i += 8)
+      o.push(ind + ids.slice(i, i + 8).map(t => q + t + q).join(", "));
+    return o.join(",\n");
+  }
+  function genCode(lang, ids, srcs, label) {
+    const hdr = `${ids.length} cell${ids.length > 1 ? "s" : ""}` +
+      (label ? ` (${label})` : "") + " selected in the trend.sst explorer;" +
+      " newest ~10 days are provisional";
+    if (lang === "r") {
+      let s = `## ${hdr}\nlibrary(arrow)\nlibrary(dplyr)\n` +
+        `ts <- s3_bucket("${BK}",\n` +
+        `  endpoint_override = "https://${EP}",\n` +
+        `  region = "", anonymous = TRUE)\n` +
+        `cells <- c(\n${idLines(ids, '"', "  ")})\n\n` +
+        `read_region <- function(src) {\n` +
+        `  open_dataset(ts$path(paste0("sums/", src))) |>\n` +
+        `    filter(cell %in% cells) |>\n` +
+        `    group_by(date) |>\n` +
+        `    summarise(n = sum(n), sumw = sum(sumw),\n` +
+        `              sumwx = sum(sumwx), sumwx2 = sum(sumwx2)) |>\n` +
+        `    collect() |> arrange(date) |>\n` +
+        `    mutate(mean = sumwx / sumw,\n` +
+        `           var = pmax(0, sumwx2 / sumw - mean^2))\n}\n`;
+      s += srcs.length === 2
+        ? `g <- read_region("ghrsst")\no <- read_region("oisst")\n` +
+          `d <- inner_join(g[c("date", "mean")], o[c("date", "mean")],\n` +
+          `                by = "date", suffix = c("_g", "_o")) |>\n` +
+          `  mutate(diff = mean_g - mean_o)\n`
+        : `d <- read_region("${srcs[0]}")\n`;
+      return s;
+    }
+    if (lang === "sql") {
+      return `-- ${hdr}\n-- duckdb\nINSTALL httpfs; LOAD httpfs;\n` +
+        `SET s3_endpoint='${EP}';\n` +
+        `SET s3_url_style='path'; SET s3_region='';\n\n` +
+        `SELECT date, SUM(sumwx) / SUM(sumw) AS mean_sst\n` +
+        `FROM read_parquet('s3://${BK}/sums/${srcs[0]}/*.parquet')\n` +
+        `WHERE cell IN (\n${idLines(ids, "'", "  ")})\n` +
+        `GROUP BY date ORDER BY date;\n` +
+        (srcs.length === 2
+          ? `-- repeat with sums/${srcs[1]} and join on date for the difference\n`
+          : "");
+    }
+    const q3 = '"' + '"' + '"';
+    return `# ${hdr}\nimport duckdb\n\ncells = [\n${idLines(ids, '"', "    ")}]\n` +
+      `con = duckdb.connect()\n` +
+      `con.sql("INSTALL httpfs; LOAD httpfs")\n` +
+      `con.sql("SET s3_endpoint='${EP}'; SET s3_url_style='path'; SET s3_region=''")\n\n` +
+      `def read_region(src):\n` +
+      `    ids = ", ".join("'" + c + "'" for c in cells)\n` +
+      `    return con.sql(f${q3}\n` +
+      `        SELECT date, SUM(sumwx) / SUM(sumw) AS mean_sst\n` +
+      `        FROM read_parquet('s3://${BK}/sums/{src}/*.parquet')\n` +
+      `        WHERE cell IN ({ids}) GROUP BY date ORDER BY date${q3}).df()\n\n` +
+      (srcs.length === 2
+        ? `g = read_region("ghrsst")\no = read_region("oisst")\n` +
+          `d = g.merge(o, on="date", suffixes=("_g", "_o"))\n` +
+          `d["diff"] = d.mean_sst_g - d.mean_sst_o\n`
+        : `d = read_region("${srcs[0]}")\n`);
+  }
+  function renderCode() {
+    const wrap = $("#codewrap");
+    if (!sel.size) { wrap.style.display = "none"; return; }
+    wrap.style.display = "";
+    for (const x of $("#cseg").children)
+      x.classList.toggle("on", x.dataset.l === UI.codeLang);
+    const ids = [...sel].map(i => cells[i].id).sort();
+    const srcs = srcName === "diff" ? ["ghrsst", "oisst"] : [srcName];
+    $("#codebox").textContent = genCode(UI.codeLang, ids, srcs, selLabel);
+    $("#codemeta").textContent = "";
+  }
+  $("#cseg").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    UI.codeLang = b.dataset.l; renderCode();
+  });
+  $("#copycode").addEventListener("click", () => {
+    navigator.clipboard.writeText($("#codebox").textContent).then(
+      () => { $("#codemeta").textContent = "copied"; },
+      () => { $("#codemeta").textContent = "select + copy manually"; });
+  });
 
   let panelView = UI.panelView;
   for (const x of $("#pseg").children)
@@ -522,9 +623,11 @@ function build(srcName, meta, monthly, aux) {
     const svg2 = d3.select("#pchart"); svg2.selectAll("*").remove();
     const w = Math.min(520, $(".panel").clientWidth), h = 300;
     svg2.attr("width", w).attr("height", h);
-    if (!sel.size) { $("#ptitle").textContent = "Region series"; return; }
+    if (!sel.size) { $("#ptitle").textContent = "Region series";
+      renderCode(); return; }
     $("#ptitle").textContent = `Region series (${selLabel ? selLabel + ", " : ""}` +
       `${sel.size} cell${sel.size > 1 ? "s" : ""})`;
+    renderCode();
     const idx = [...sel];
     const mkpts = (mn, months, getV, getW) => {
       const pts = [];
