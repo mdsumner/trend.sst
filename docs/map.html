@@ -236,20 +236,30 @@ function build(srcName, meta, monthly, aux) {
   const svg = d3.select("#globe").attr("width", size).attr("height", size);
   const proj = d3.geoOrthographic()
     .translate([size / 2, size / 2]).scale(UI.scale || size / 2 - 8)
-    .rotate(UI.rotate).clipAngle(90).precision(.5);
+    .rotate(UI.rotate).clipAngle(90).precision(0);
+  // precision(0): adaptive resampling OFF for both spherical views --
+  // rings arrive slerp-densified (~28 pts/cell) from the exporter, so
+  // d3 resampling was densifying the already-densified (~30% of the
+  // per-frame script cost, measured); the horizon circle and graticule
+  // have their own stepping and are unaffected
   const path = d3.geoPath(proj);
   // longlat: longitude/latitude used directly as plot coordinates --
   // NOT eqc/plate carree, nothing is scaled to metres, the angles never
   // leave angular space before becoming pixels. d3 cuts rings at the
   // antimeridian; drag spins the central meridian (shared with the
   // globe) and, when zoomed, slides north-south.
-  const llProj = d3.geoEquirectangular().precision(.5)
+  const llProj = d3.geoEquirectangular()
     .fitExtent([[8, 8], [size - 8, size - 8]], { type: "Sphere" });
   const llBase = llProj.scale();
   const llLim = () => Math.max(0, (Math.PI * llProj.scale() - size) / 2);
   llProj.scale(llBase * (UI.llk || 1)).rotate([UI.rotate[0], 0])
     .translate([size / 2, size / 2 +
-      Math.max(-llLim(), Math.min(llLim(), UI.llty || 0))]);
+      Math.max(-llLim(), Math.min(llLim(), UI.llty || 0))])
+    .precision(0)
+    // planar viewport cull: longlat lacks the globe's free
+    // back-hemisphere clip, and zoomed-in it would otherwise project
+    // and paint the whole world offscreen every frame
+    .clipExtent([[0, 0], [size, size]]);
   const llPath = d3.geoPath(llProj);
   const byId = new Map(cells.map((c, i) => [c.id, i]));
   const sel = new Set(UI.selIds.map(id => byId.get(id)).filter(i => i != null));
@@ -591,6 +601,13 @@ function build(srcName, meta, monthly, aux) {
   }
 
   const pan = UI.pan;
+  // pointer events outrun display frames (120-250/s on some devices,
+  // each previously triggering a full reprojection of every cell);
+  // coalesce to at most one render per animation frame
+  let raf = 0;
+  const requestRender = () => {
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); });
+  };
   function render() {
     const planar = view === "spilhaus" ? spd
                  : view === "faces" ? fcPaths : null;
@@ -653,7 +670,7 @@ function build(srcName, meta, monthly, aux) {
          pan.x = drag[2].x + (ev.clientX - drag[0]);
          pan.y = drag[2].y + (ev.clientY - drag[1]);
        }
-       render();
+       requestRender();
      })
      .on("pointerup pointerleave", () => drag = null)
      .on("wheel", ev => {
@@ -678,7 +695,7 @@ function build(srcName, meta, monthly, aux) {
          pan.y = size / 2 + (pan.y - size / 2) * r;
          pan.k = k2;
        }
-       render();
+       requestRender();
      });
 
   $("#view").value = view;
