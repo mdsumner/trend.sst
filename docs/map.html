@@ -167,10 +167,18 @@ loadSource("ghrsst");
 function build(srcName, meta, monthly, aux) {
   const MET = srcName === "diff" ? DIFF_METRICS : METRICS;
   const cells = meta.cells, nm = meta.months.length;
+  // rings arrive slerp-densified (28 pts) but the renderer keeps only
+  // the 4 corners: S2 edges are great circles, exactly the curve d3's
+  // adaptive resampler interpolates, so each view densifies each edge
+  // only as far as it actually curves there -- adaptive densification
+  // in the browser. Measured: halves render time, ~7x less path data
+  // than projecting the baked points every frame; pixel-diff vs dense
+  // rings is antialiasing jitter only.
+  const corners = r => r.length === 28 ? r.filter((q, j) => j % 7 === 0) : r;
   const feats = cells.map((c, i) => {
     const f = { type: "Feature", idx: i,
       geometry: { type: "Polygon",
-        coordinates: [[...c.ring, c.ring[0]]] } };
+        coordinates: [[...corners(c.ring), c.ring[0]]] } };
     // d3-geo polygons are spherical: a ring wound the wrong way is the
     // sphere-complement (everything except the cell). Self-correct by
     // area: a level-5 cell is tiny, so > hemisphere means rewind.
@@ -235,12 +243,10 @@ function build(srcName, meta, monthly, aux) {
   const svg = d3.select("#globe").attr("width", size).attr("height", size);
   const proj = d3.geoOrthographic()
     .translate([size / 2, size / 2]).scale(UI.scale || size / 2 - 8)
-    .rotate(UI.rotate).clipAngle(90).precision(0);
-  // precision(0): adaptive resampling OFF for both spherical views --
-  // rings arrive slerp-densified (~28 pts/cell) from the exporter, so
-  // d3 resampling was densifying the already-densified (~30% of the
-  // per-frame script cost, measured); the horizon circle and graticule
-  // have their own stepping and are unaffected
+    .rotate(UI.rotate).clipAngle(90).precision(.7);
+  // precision(.7): adaptive resampling ON, fed corner-only rings (see
+  // corners() above) -- the resampler is the densifier now, emitting
+  // vertices only where the current view bends an edge beyond ~a pixel
   const path = d3.geoPath(proj);
   // longlat: longitude/latitude used directly as plot coordinates --
   // NOT eqc/plate carree, nothing is scaled to metres, the angles never
@@ -254,7 +260,7 @@ function build(srcName, meta, monthly, aux) {
   llProj.scale(llBase * (UI.llk || 1)).rotate([UI.rotate[0], 0])
     .translate([size / 2, size / 2 +
       Math.max(-llLim(), Math.min(llLim(), UI.llty || 0))])
-    .precision(0)
+    .precision(.7)
     // planar viewport cull: longlat lacks the globe's free
     // back-hemisphere clip, and zoomed-in it would otherwise project
     // and paint the whole world offscreen every frame
@@ -467,7 +473,9 @@ function build(srcName, meta, monthly, aux) {
   const faceXY = f => [FM + FPOS[f][0] * FS, FM + FPOS[f][1] * FS];
   const fcPaths = cells.map(c => {
     const f = faceOf(c.id), o = faceXY(f);
-    const pts = c.ring.map(([lon, lat]) => {
+    // corners are EXACT here: cell edges are lines of constant u or v,
+    // straight in the face's native uv by construction
+    const pts = corners(c.ring).map(([lon, lat]) => {
       const cl = Math.cos(lat * Math.PI / 180);
       const uv = uvOf(f, cl * Math.cos(lon * Math.PI / 180),
                          cl * Math.sin(lon * Math.PI / 180),
