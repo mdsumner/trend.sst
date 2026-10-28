@@ -27,7 +27,7 @@
   .viz-root { background: var(--surface-1); color: var(--text-primary);
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
     min-height: 100vh; padding: 20px 24px 40px; }
-  .wrap { max-width: 1200px; margin: 0 auto; }
+  .wrap { max-width: 1760px; margin: 0 auto; }
 
   h1 { font-size: 20px; margin: 0; font-weight: 650; }
   header { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
@@ -55,7 +55,7 @@
   .cols { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
   #globe { touch-action: none; cursor: grab; }
   #globe:active { cursor: grabbing; }
-  .panel { flex: 1 1 360px; min-width: 320px; }
+  .panel { flex: 1 1 420px; min-width: 340px; max-width: 760px; }
   .panel h2 { font-size: 15px; margin: 2px 0 2px; font-weight: 650; }
   .note { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 8px; }
   .legend { font-size: 12px; color: var(--text-secondary);
@@ -229,7 +229,8 @@ function build(srcName, meta, monthly, aux) {
       </div>
     </div>`;
 
-  const size = Math.min(620, Math.max(380, innerWidth - 480));
+  const wrapW = Math.min(1760, document.querySelector(".wrap").clientWidth);
+  const size = Math.max(420, Math.min(innerHeight - 230, wrapW - 470, 1200));
   const svg = d3.select("#globe").attr("width", size).attr("height", size);
   const proj = d3.geoOrthographic()
     .translate([size / 2, size / 2]).scale(UI.scale || size / 2 - 8)
@@ -662,17 +663,23 @@ function build(srcName, meta, monthly, aux) {
     restyle(); drawSeries();
   });
   window._mapRedraw = () => { restyle(); drawSeries(); };
+  window._mapRebuild = () => build(srcName, meta, monthly, aux);
   if (!window._mapMM) {
     window._mapMM = true;
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
       () => window._mapRedraw());
+    let rt = null;
+    addEventListener("resize", () => {
+      clearTimeout(rt);
+      rt = setTimeout(() => window._mapRebuild(), 250);
+    });
   }
 
   // region series from cell sums: one line per source (diff mode
   // overlays both), area-weighted combination computed client-side
   function drawSeries() {
     const svg2 = d3.select("#pchart"); svg2.selectAll("*").remove();
-    const w = Math.min(520, $(".panel").clientWidth), h = 300;
+    const w = Math.min(720, $(".panel").clientWidth), h = 320;
     svg2.attr("width", w).attr("height", h);
     if (!sel.size) { $("#ptitle").textContent = "Region series";
       renderCode(); return; }
