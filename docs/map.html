@@ -117,6 +117,7 @@ const DATA = {};
 const UI = { metric: "trend", view: "ortho", panelView: "time",
              selIds: [], selLabel: null, regionKey: "",
              rotate: [155, 10], scale: null, pan: { x: 0, y: 0, k: 1 },
+             llk: 1, llty: 0,
              coast: false, codeLang: "r" };
 function fetchSource(src) {
   if (DATA[src]) return Promise.resolve(DATA[src]);
@@ -187,6 +188,7 @@ function build(srcName, meta, monthly, aux) {
       </select></label>
       <label>View <select id="view">
         <option value="ortho">Globe</option>
+        <option value="longlat">Longlat</option>
         <option value="spilhaus">Spilhaus</option>
         <option value="faces">Cube net</option>
       </select></label>
@@ -236,6 +238,19 @@ function build(srcName, meta, monthly, aux) {
     .translate([size / 2, size / 2]).scale(UI.scale || size / 2 - 8)
     .rotate(UI.rotate).clipAngle(90).precision(.5);
   const path = d3.geoPath(proj);
+  // longlat: longitude/latitude used directly as plot coordinates --
+  // NOT eqc/plate carree, nothing is scaled to metres, the angles never
+  // leave angular space before becoming pixels. d3 cuts rings at the
+  // antimeridian; drag spins the central meridian (shared with the
+  // globe) and, when zoomed, slides north-south.
+  const llProj = d3.geoEquirectangular().precision(.5)
+    .fitExtent([[8, 8], [size - 8, size - 8]], { type: "Sphere" });
+  const llBase = llProj.scale();
+  const llLim = () => Math.max(0, (Math.PI * llProj.scale() - size) / 2);
+  llProj.scale(llBase * (UI.llk || 1)).rotate([UI.rotate[0], 0])
+    .translate([size / 2, size / 2 +
+      Math.max(-llLim(), Math.min(llLim(), UI.llty || 0))]);
+  const llPath = d3.geoPath(llProj);
   const byId = new Map(cells.map((c, i) => [c.id, i]));
   const sel = new Set(UI.selIds.map(id => byId.get(id)).filter(i => i != null));
   let selLabel = UI.selLabel;
@@ -515,7 +530,8 @@ function build(srcName, meta, monthly, aux) {
     }
     coastP.style("display", null)
       .attr("stroke", css("--text-secondary")).attr("stroke-opacity", .75)
-      .attr("d", view === "ortho" ? path(landMesh) : coastNetD);
+      .attr("d", view === "faces" ? coastNetD
+               : (view === "longlat" ? llPath : path)(landMesh));
   }
   const grat = root.append("path")
     .datum(d3.geoGraticule10())
@@ -581,9 +597,10 @@ function build(srcName, meta, monthly, aux) {
     ffg.style("display", view === "faces" ? null : "none");
     if (!planar) {
       root.attr("transform", null);
-      grat.style("display", null).attr("d", path);
-      sphere.style("display", null).attr("d", path);
-      cellP.style("display", null).attr("d", path);
+      const P = view === "longlat" ? llPath : path;
+      grat.style("display", null).attr("d", P);
+      sphere.style("display", null).attr("d", P);
+      cellP.style("display", null).attr("d", P);
     } else {
       root.attr("transform",
         `translate(${pan.x},${pan.y}) scale(${pan.k})`);
@@ -608,11 +625,14 @@ function build(srcName, meta, monthly, aux) {
         ? ` (${nseam} seam cell${nseam > 1 ? "s" : ""} hidden)` : "");
   }
 
-  // drag: rotate the globe, or pan the spilhaus plane; wheel zooms both
+  // drag: rotate the globe, spin/slide the longlat rectangle, or pan
+  // the spilhaus plane; wheel zooms all
   let drag = null;
   svg.on("pointerdown", ev => {
        drag = [ev.clientX, ev.clientY,
-               view === "ortho" ? proj.rotate() : { ...pan }]; })
+               view === "ortho" ? proj.rotate()
+             : view === "longlat" ? [llProj.rotate()[0], llProj.translate()[1]]
+             : { ...pan }]; })
      .on("pointermove", ev => {
        if (!drag) return;
        if (view === "ortho") {
@@ -620,6 +640,15 @@ function build(srcName, meta, monthly, aux) {
          proj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k,
                       Math.max(-90, Math.min(90, drag[2][1] - (ev.clientY - drag[1]) * k))]);
          UI.rotate = proj.rotate();
+       } else if (view === "longlat") {
+         const k = 180 / (Math.PI * llProj.scale());
+         llProj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k, 0]);
+         UI.rotate[0] = llProj.rotate()[0];
+         const L = llLim();
+         const ty = Math.max(size / 2 - L, Math.min(size / 2 + L,
+           drag[2][1] + (ev.clientY - drag[1])));
+         llProj.translate([size / 2, ty]);
+         UI.llty = ty - size / 2;
        } else {
          pan.x = drag[2].x + (ev.clientX - drag[0]);
          pan.y = drag[2].y + (ev.clientY - drag[1]);
@@ -633,6 +662,15 @@ function build(srcName, meta, monthly, aux) {
          proj.scale(Math.max(size / 4, Math.min(size * 2,
            proj.scale() * (ev.deltaY < 0 ? 1.12 : 0.9))));
          UI.scale = proj.scale();
+       } else if (view === "longlat") {
+         llProj.scale(Math.max(llBase, Math.min(llBase * 10,
+           llProj.scale() * (ev.deltaY < 0 ? 1.12 : 0.9))));
+         UI.llk = llProj.scale() / llBase;
+         const L = llLim();
+         const ty = Math.max(size / 2 - L, Math.min(size / 2 + L,
+           llProj.translate()[1]));
+         llProj.translate([size / 2, ty]);
+         UI.llty = ty - size / 2;
        } else {
          const f = ev.deltaY < 0 ? 1.12 : 0.9;
          const k2 = Math.max(.5, Math.min(8, pan.k * f)), r = k2 / pan.k;
@@ -652,6 +690,9 @@ function build(srcName, meta, monthly, aux) {
   $("#view").addEventListener("change", e => {
     view = UI.view = e.target.value;
     pan.x = 0; pan.y = 0; pan.k = 1;
+    // globe and longlat share the central meridian: the view follows you
+    proj.rotate(UI.rotate);
+    llProj.rotate([UI.rotate[0], 0]);
     render(); drawRamp();
   });
   $("#metric").addEventListener("change", e => {
