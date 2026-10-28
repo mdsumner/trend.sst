@@ -87,7 +87,7 @@ S2 level-5 cells.</footer>
 <script>
 const $ = s => document.querySelector(s);
 const BUCKET = "https://projects.pawsey.org.au/aad-derived/trend-sst";
-const SITE_FILES = ["status.json", "series.json", "cells-oisst.json", "monthly-oisst.bin", "cells-ghrsst.json", "monthly-ghrsst.bin"];
+const SITE_FILES = ["status.json", "series.json", "cells-oisst.json", "monthly-oisst.bin", "cells-ghrsst.json", "monthly-ghrsst.bin", "coast-110m.json"];
 const fmtB = b => b == null ? "-"
   : b > 1e9 ? (b / 1e9).toFixed(2) + " GB"
   : b > 1e6 ? (b / 1e6).toFixed(1) + " MB"

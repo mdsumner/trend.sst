@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trend.sst - cell explorer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson-client/3.1.0/topojson-client.min.js"></script>
 <style>
   .viz-root {
     color-scheme: light;
@@ -498,7 +497,8 @@ function build(srcName, meta, monthly, aux) {
   // split at face changes); not available in Spilhaus (rings are baked
   // server-side and no browser spilhaus projection exists here)
   const coastP = root.append("path").attr("fill", "none")
-    .attr("stroke-width", .7).style("pointer-events", "none")
+    .attr("stroke-width", 1.2).attr("vector-effect", "non-scaling-stroke")
+    .style("pointer-events", "none")
     .style("display", "none");
   let landMesh = null, coastNetD = null;
   function facesCoast(mesh) {
@@ -530,16 +530,22 @@ function build(srcName, meta, monthly, aux) {
       coastP.style("display", "none"); return;
     }
     if (!landMesh) {
-      d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-110m.json")
-        .then(w => {
-          landMesh = topojson.mesh(w, w.objects.land);
-          coastNetD = facesCoast(landMesh);
+      // self-hosted: this used to come from a second CDN (jsdelivr,
+      // while the page scripts come from cdnjs) and failed silently on
+      // networks that block one but not the other. Baked GeoJSON mesh
+      // (Natural Earth 1:110m land via world-atlas, 2dp), 76 kB.
+      d3.json("data/coast-110m.json")
+        .then(m => {
+          landMesh = m;
+          coastNetD = facesCoast(m);
           updateCoast();
         }).catch(() => {});
       return;
     }
-    coastP.style("display", null)
-      .attr("stroke", css("--text-secondary")).attr("stroke-opacity", .75)
+    // raise above the cells: the coastline runs exactly where coastal
+    // cells sit, so drawn below them it was almost entirely hidden
+    coastP.raise().style("display", null)
+      .attr("stroke", css("--text-primary")).attr("stroke-opacity", .9)
       .attr("d", view === "faces" ? coastNetD
                : (view === "longlat" ? llPath : path)(landMesh));
   }
