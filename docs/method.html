@@ -184,6 +184,16 @@ them by the identity above. And it is why "add a region" is a
 one-line change &mdash; a region is a cell list, not a new
 computation.</p>
 
+<p>The design has deep prior art. NASA ocean colour has stored exactly
+these accumulations &mdash; weighted sums and sums of squares per
+equal-area bin &mdash; since SeaWiFS in 1997, in the L3bin format's
+integerized sinusoidal rows (a proto-DGGS: each latitude row holds just
+as many bins as it needs). trend.sst swaps the ragged rows for a
+hierarchical cell index and HDF for Parquet on object storage, but the
+statistical contract is the same one that scheme proved decades ago.
+See <a href="https://github.com/hypertidy/L3bin">hypertidy/L3bin</a>
+for the binning scheme implemented in R.</p>
+
 <h2>The pipeline, end to end</h2>
 
 <figure>
@@ -249,6 +259,27 @@ deliberate: boundary-exact masks are a per-region, per-grid
 recomputation; cell sums are computed once and answer every region
 after the fact. For boundary-sensitive work the pixel tier remains
 upstream, untouched.</p>
+
+<h2>References</h2>
+<p>Campbell, J.W., Blaisdell, J.M. and Darzi, M. (1995).
+<i>Level-3 SeaWiFS Data Products: Spatial and Temporal Binning
+Algorithms</i>. NASA Technical Memorandum 104566, Vol. 32
+(SeaWiFS Prelaunch Technical Report Series), NASA Goddard Space Flight
+Center.
+<a href="https://oceancolor.gsfc.nasa.gov/images/resources/seawifs/PreLVol32.pdf">PDF</a>
+&mdash; the operational prior art: weighted sums and sums of squares
+accumulated per equal-area bin, as run for every NASA ocean colour
+mission since SeaWiFS.</p>
+<p>Chan, T.F., Golub, G.H. and LeVeque, R.J. (1983). Algorithms for
+computing the sample variance: analysis and recommendations.
+<i>The American Statistician</i> 37(3), 242&ndash;247
+&mdash; the numerical analysis of exactly the merge used here:
+combining sums and sums of squares across partitions of the data.</p>
+<p>Fisher, R.A. (1922). On the mathematical foundations of theoretical
+statistics. <i>Philosophical Transactions of the Royal Society A</i>
+222, 309&ndash;368 &mdash; where "sufficient statistic" gets its name
+and its meaning: the stored sums carry everything the data had to say
+about the quantities reported.</p>
 
 <footer>trend.sst &middot; sums are per-date Parquet of
 (cell, n, sumw, sumwx, sumwx2) on S2 level-5 cells &middot;
