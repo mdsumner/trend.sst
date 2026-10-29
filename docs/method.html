@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trend.sst - method</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f0efec;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
+    --series-1: #2a78d6; --grid: #e4e3de; --border: #d8d7d0;
+    --accent-warm: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
+      --series-1: #3987e5; --grid: #32322f; --border: #3d3d39;
+      --accent-warm: #e05252;
+    }
+  }
+  html, body { margin: 0; }
+  .viz-root { background: var(--surface-1); color: var(--text-primary);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; padding: 20px 24px 48px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+
+  h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; padding-bottom: 8px; }
+  header { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tabs { display: flex; gap: 4px; align-items: flex-end; flex: 1; }
+  .tabs a { padding: 7px 14px; color: var(--text-secondary);
+    text-decoration: none; font-size: 13px; border: 1px solid transparent;
+    border-radius: 8px 8px 0 0; margin-bottom: -1px; white-space: nowrap; }
+  .tabs a:hover { color: var(--text-primary); }
+  .tabs a.on { background: var(--surface-1); border-color: var(--border);
+    border-bottom-color: var(--surface-1); color: var(--text-primary);
+    font-weight: 600; }
+  .tabs a.ext { margin-left: auto; align-self: center; margin-bottom: 7px;
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+    font-size: 12px; color: var(--series-1); background: var(--surface-2); }
+  .tabs a.ext::after { content: " \2197"; }
+  .tabs a.ext:hover { border-color: var(--series-1); }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 2px 0 24px; }
+
+  h2 { font-size: 16px; font-weight: 650; margin: 34px 0 8px; }
+  p { margin: 10px 0; max-width: 72ch; }
+  a { color: var(--series-1); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px; }
+  figure { margin: 18px 0; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--text-muted); font-size: 12.5px; margin-top: 6px;
+    max-width: 72ch; }
+  .card { background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; margin: 16px 0; }
+  .card .mono { font-size: 13.5px; }
+  .card p { margin: 6px 0; }
+  table { border-collapse: collapse; font-size: 13px; margin: 12px 0;
+    font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 16px 5px 0;
+    border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12px;
+    letter-spacing: .03em; text-transform: uppercase; }
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 40px; }
+
+  /* diagram strokes/fills via theme vars */
+  .d-grid { stroke: var(--grid); stroke-width: 1; }
+  .d-cell { stroke: var(--accent-warm); stroke-width: 2; fill: none; }
+  .d-box { fill: var(--surface-2); stroke: var(--border); rx: 8; }
+  .d-lab { fill: var(--text-secondary); font: 12px system-ui, sans-serif; }
+  .d-lab2 { fill: var(--text-muted); font: 11px system-ui, sans-serif; }
+  .d-mono { fill: var(--text-primary);
+    font: 11.5px ui-monospace, Menlo, Consolas, monospace; }
+  .d-arrow { stroke: var(--text-muted); stroke-width: 1.3; fill: none;
+    marker-end: url(#arr); }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+<header>
+  <h1>trend.sst</h1>
+  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="method.html" class="on">Method</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a></nav>
+</header>
+<p class="sub">How daily satellite pixels become the statistically-ready
+cell sums everything on this site is computed from.</p>
+
+<h2>One frame for every source</h2>
+<p>Every product is summarized onto the same discrete global grid:
+<b>S2 cells at level 5</b>. The S2 library projects the sphere onto the
+six faces of a cube and subdivides each face recursively; at level 5
+there are 6 &times; 4<sup>5</sup> = 6,144 cells worldwide, each about
+83,000 km<sup>2</sup> (roughly 290 km across). Of those, 5,451 touch
+ocean in GHRSST MUR and 4,867 in OISST (the products differ at coasts
+and ice). The cells nest exactly inside their parents, every cell has a
+compact sortable token for an id, and a region of any shape is just a
+set of cells &mdash; which is why the Explorer treats
+<i>regionalization as selection</i>, and why the cube-net view there
+shows the grid's native geometry.</p>
+
+<h2>Pixels keep their native grid</h2>
+<p>The daily fields are never warped, resampled, or interpolated. Each
+source pixel is assigned, whole, to the one cell that contains its
+centre &mdash; a <b>dense positional mapping</b> from pixel index to
+cell id, computed once per grid and stored beside the sums (a grid
+stamp guards against ever applying a mapping to the wrong grid). A
+level-5 cell contains on the order of 70,000&ndash;100,000 MUR pixels
+(0.01&deg;) or about 100&ndash;170 OISST pixels (0.25&deg;); both
+sources land in the same cells, at their own native resolution.</p>
+
+<figure>
+<svg viewBox="0 0 860 240" role="img" aria-label="pixel grids mapping into one S2 cell">
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5"
+    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0L10,5L0,10z" fill="var(--text-muted)"/></marker></defs>
+  <!-- fine grid (MUR) -->
+  <g transform="translate(20,30)">
+    <g class="d-grid">
+      <path d="M0,0h220M0,11h220M0,22h220M0,33h220M0,44h220M0,55h220M0,66h220M0,77h220M0,88h220M0,99h220M0,110h220M0,121h220M0,132h220M0,143h220M0,154h220M0,165h220
+               M0,0v165M11,0v165M22,0v165M33,0v165M44,0v165M55,0v165M66,0v165M77,0v165M88,0v165M99,0v165M110,0v165M121,0v165M132,0v165M143,0v165M154,0v165M165,0v165M176,0v165M187,0v165M198,0v165M209,0v165M220,0v165"/>
+    </g>
+    <path class="d-cell" d="M28,22 L196,14 L204,148 L20,140 Z"/>
+    <text class="d-lab" x="0" y="190">GHRSST MUR, 0.01 deg</text>
+    <text class="d-lab2" x="0" y="206">~70k-100k pixels per cell</text>
+  </g>
+  <!-- coarse grid (OISST) -->
+  <g transform="translate(300,30)">
+    <g class="d-grid">
+      <path d="M0,0h220M0,33h220M0,66h220M0,99h220M0,132h220M0,165h220
+               M0,0v165M33,0v165M66,0v165M99,0v165M132,0v165M165,0v165M198,0v165"/>
+    </g>
+    <path class="d-cell" d="M28,22 L196,14 L204,148 L20,140 Z"/>
+    <text class="d-lab" x="0" y="190">OISST, 0.25 deg</text>
+    <text class="d-lab2" x="0" y="206">~100-170 pixels per cell</text>
+  </g>
+  <path class="d-arrow" d="M545,110 L600,110"/>
+  <!-- stat row -->
+  <g transform="translate(612,62)">
+    <rect class="d-box" x="0" y="0" width="236" height="96" rx="8"/>
+    <text class="d-lab" x="14" y="24">one row per cell, per day</text>
+    <text class="d-mono" x="14" y="48">cell  n  sumw  sumwx</text>
+    <text class="d-mono" x="14" y="66">      sumwx2</text>
+    <text class="d-lab2" x="14" y="86">same cell id for both sources</text>
+  </g>
+</svg>
+<figcaption>The same cell (outline) seen by both grids. Pixels are
+assigned whole to the cell containing their centre; nothing is warped.
+The quadrilateral is schematic &mdash; real cell edges are great
+circles, drawn properly in the Explorer.</figcaption>
+</figure>
+
+<h2>Four sums, and why they are enough</h2>
+<p>For each cell, each day, the accumulation keeps four numbers over
+the contributing ocean pixels: the pixel count <span class="mono">n</span>,
+the summed area weight <span class="mono">sumw</span> (each pixel
+weighted by its spherical area, so high-latitude pixels count for what
+they cover, not for how many they are), and the weighted sums
+<span class="mono">sumwx</span> and <span class="mono">sumwx2</span> of
+the value and its square. One Parquet file per date; a failed date
+writes nothing and is simply re-run.</p>
+
+<div class="card">
+<p><b>The algebra that makes the store "statistically ready":</b></p>
+<p class="mono">mean&nbsp;&nbsp;&nbsp;&nbsp;= sumwx / sumw</p>
+<p class="mono">variance = sumwx2 / sumw - mean^2</p>
+<p>and the sums are <b>mergeable</b>: the statistics of any union of
+cells, days, or both come from <i>adding the rows first</i> and taking
+the ratio once. No averaging of averages, no reweighting step, no loss
+of exactness. A regional daily series, a monthly cell mean, a
+23-year trend input &mdash; all are the same operation at different
+groupings.</p>
+</div>
+
+<p>This is why the Explorer can compute the series for any hand-picked
+set of cells instantly in your browser: it holds monthly
+<span class="mono">sumw</span>-weighted means per cell and combines
+them by the identity above. And it is why "add a region" is a
+one-line change &mdash; a region is a cell list, not a new
+computation.</p>
+
+<h2>The pipeline, end to end</h2>
+
+<figure>
+<svg viewBox="0 0 860 150" role="img" aria-label="pipeline stages">
+  <g transform="translate(0,18)">
+    <rect class="d-box" x="0" y="0" width="150" height="72" rx="8"/>
+    <text class="d-lab" x="12" y="24">daily grids</text>
+    <text class="d-lab2" x="12" y="42">MUR COG mirror,</text>
+    <text class="d-lab2" x="12" y="58">OISST netCDF</text>
+    <path class="d-arrow" d="M152,36 L184,36"/>
+    <rect class="d-box" x="188" y="0" width="150" height="72" rx="8"/>
+    <text class="d-lab" x="200" y="24">accumulate</text>
+    <text class="d-lab2" x="200" y="42">HPC job, resumable,</text>
+    <text class="d-lab2" x="200" y="58">4 sums / cell / day</text>
+    <path class="d-arrow" d="M340,36 L372,36"/>
+    <rect class="d-box" x="376" y="0" width="150" height="72" rx="8"/>
+    <text class="d-lab" x="388" y="24">object store</text>
+    <text class="d-lab2" x="388" y="42">public Parquet,</text>
+    <text class="d-lab2" x="388" y="58">one file per date</text>
+    <path class="d-arrow" d="M528,36 L560,36"/>
+    <rect class="d-box" x="564" y="0" width="140" height="72" rx="8"/>
+    <text class="d-lab" x="576" y="24">exporter</text>
+    <text class="d-lab2" x="576" y="42">bakes small JSON</text>
+    <text class="d-lab2" x="576" y="58">for this site</text>
+    <path class="d-arrow" d="M706,36 L738,36"/>
+    <rect class="d-box" x="742" y="0" width="112" height="72" rx="8"/>
+    <text class="d-lab" x="754" y="24">browser</text>
+    <text class="d-lab2" x="754" y="42">combines cell</text>
+    <text class="d-lab2" x="754" y="58">sums live</text>
+  </g>
+  <text class="d-lab2" x="0" y="124">pixel truth stays upstream in the COGs; the sums are the authoritative derived store; the site files are disposable bakes</text>
+</svg>
+</figure>
+
+<table>
+  <tr><th>tier</th><th>what</th><th>where</th><th>size</th></tr>
+  <tr><td>pixels</td><td>daily COGs / netCDF, full resolution</td>
+      <td class="mono">source.coop, NOAA</td><td>TBs</td></tr>
+  <tr><td>sums</td><td>per-date Parquet of (cell, n, sumw, sumwx, sumwx2)</td>
+      <td class="mono">projects.pawsey.org.au/aad-derived/trend-sst</td><td>GBs</td></tr>
+  <tr><td>site data</td><td>baked series, per-cell metrics, monthly means</td>
+      <td class="mono">docs/data/ on this site</td><td>MBs</td></tr>
+</table>
+
+<p>Each tier is derived from the one above and can be rebuilt from it;
+nothing on this site is hand-maintained. Anything you see here can be
+reproduced against the sums directly &mdash; select cells in the
+<a href="map.html">Explorer</a> and use <i>Get the data</i> for ready
+R / SQL / Python snippets, including the bulk-sync route for intensive
+work. The <a href="mechanics.html">Mechanics</a> page watches the gap
+between the tiers (what the bucket holds vs what this site was baked
+from), and the trailing ~10 days of GHRSST / ~14 of OISST are
+provisional pending upstream finalization.</p>
+
+<h2>What exactness means here</h2>
+<p>Summaries at cell level are exact in a way masked or warped
+pipelines are not: every source pixel is counted once, with its own
+area, in its own cell, and the stored sums determine the mean and
+variance of any cell union to floating-point precision. What is
+<i>approximated</i> is the region boundary itself &mdash; a "Pacific"
+built from 290 km cells has a 290 km-grained edge. That trade is
+deliberate: boundary-exact masks are a per-region, per-grid
+recomputation; cell sums are computed once and answer every region
+after the fact. For boundary-sensitive work the pixel tier remains
+upstream, untouched.</p>
+
+<footer>trend.sst &middot; sums are per-date Parquet of
+(cell, n, sumw, sumwx, sumwx2) on S2 level-5 cells &middot;
+<a href="https://github.com/mdsumner/trend.sst">source</a></footer>
+</div></div>
+</body>
+</html>
