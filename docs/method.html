@@ -114,6 +114,14 @@ level-5 cell contains on the order of 70,000&ndash;100,000 MUR pixels
 (0.01&deg;) or about 100&ndash;170 OISST pixels (0.25&deg;); both
 sources land in the same cells, at their own native resolution.</p>
 
+<p>The same principle carries to polygons: if your workflow needs to
+rasterize regions against a native grid, see
+<a href="https://github.com/hypertidy/controlledburn">controlledburn</a>,
+which computes exact polygon coverage as sparse cell runs without
+materializing a mask, and its natural partner in Rust,
+<a href="https://github.com/hypertidy/rwarp">rwarp</a>, for the cases
+where data genuinely must move between grids.</p>
+
 <figure>
 <svg viewBox="0 0 860 240" role="img" aria-label="pixel grids mapping into one S2 cell">
   <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5"
@@ -152,7 +160,14 @@ sources land in the same cells, at their own native resolution.</p>
 <figcaption>The same cell (outline) seen by both grids. Pixels are
 assigned whole to the cell containing their centre; nothing is warped.
 The quadrilateral is schematic &mdash; real cell edges are great
-circles, drawn properly in the Explorer.</figcaption>
+circles, drawn properly in the Explorer: each cell ships as its four
+corners and the browser densifies each edge only as far as the current
+projection bends it (adaptive densification; see
+<a href="https://github.com/hypertidy/bigcurve">bigcurve</a> and its
+Rust counterpart
+<a href="https://github.com/hypertidy/bigcurve-rs">bigcurve-rs</a>, with
+<a href="https://github.com/hypertidy/rwarp">rwarp</a> applying the same
+idea to grid warping).</figcaption>
 </figure>
 
 <h2>Four sums, and why they are enough</h2>
