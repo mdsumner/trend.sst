@@ -10,3 +10,7 @@ sums
 *.out
 cache
 
+oisstfiles.parquet
+manifest.json
+oracle-sums
+probe-sums
