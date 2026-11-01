@@ -1,4 +1,5 @@
 ## daily refresh of trend.sst on Setonix. Install with:  scrontab scrontab.txt
+## FIRST save what is installed:  scrontab -l > ~/scrontab-backup-$(date +%F).txt
 ## (replaces your WHOLE scrontab -- trend.sla has its own entry, so merge
 ## both in with  scrontab -e  instead). Times are Setonix local (AWST).
 ## A daily run touches ~11 GHRSST dates (10 provisional tail + new) and
