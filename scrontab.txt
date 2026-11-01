@@ -1,0 +1,18 @@
+## daily refresh of trend.sst on Setonix. Install with:  scrontab scrontab.txt
+## (replaces your WHOLE scrontab -- trend.sla has its own entry, so merge
+## both in with  scrontab -e  instead). Times are Setonix local (AWST).
+## A daily run touches ~11 GHRSST dates (10 provisional tail + new) and
+## 1-2 OISST dates. Resources are a first guess: check MaxRSS with
+##   sacct -j <jobid> --format=JobID,Elapsed,MaxRSS
+## after the first run and adjust; workers follow --cpus-per-task.
+## The site export ends with a git push: it needs credentials that work
+## without a prompt (cached PAT or a deploy key), or that step fails and
+## the sums are still published.
+#SCRON --job-name=sst-daily
+#SCRON --account=pawsey1362
+#SCRON --partition=work
+#SCRON --nodes=1 --ntasks=1 --cpus-per-task=16 --mem=96G
+#SCRON --time=03:00:00
+#SCRON --chdir=/scratch/pawsey1362/mdsumner/trend.sst
+#SCRON --output=/scratch/pawsey1362/mdsumner/trend.sst/sst-daily-%j.out
+43 5 * * * bash -l data-raw/daily.sh
