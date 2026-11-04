@@ -19,6 +19,14 @@ cd "$SLURM_SUBMIT_DIR"
 ## the exporter's cache layout IS the repo root (sums/ + s2_registry.parquet)
 $RUN Rscript data-raw/export_site.R . || { echo "export FAILED" >&2; exit 1; }
 
+## modes page: EOFs of the monthly exports just written (numpy only);
+## GHRSST is restricted to cells OISST has (MUR covers lakes worldwide).
+## A failure leaves the previous eof-*.json in place.
+$RUN python3 data-raw/eof.py docs/data oisst degC 6 \
+  || echo "WARNING: eof.py oisst FAILED" >&2
+$RUN python3 data-raw/eof.py docs/data ghrsst degC 6 oisst \
+  || echo "WARNING: eof.py ghrsst FAILED" >&2
+
 ## refuse to publish a one-source export when both sums exist
 for src in oisst ghrsst; do
   if [ -d "sums/$src" ] && ! grep -q "\"$src\"" docs/data/status.json; then
