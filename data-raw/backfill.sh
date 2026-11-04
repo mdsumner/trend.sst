@@ -16,8 +16,12 @@
 export SST_SOURCE=${SST_SOURCE:-oisst}
 export SST_WORKERS=${SST_WORKERS:-64}
 
+## Setonix modules: singularity/4.1.0-slurm needs pawseyenv/2024.05 (the
+## default pawseyenv moved on), and a non-login shell needs Lmod first
+if ! type module >/dev/null 2>&1; then _u=${-//[^u]/}; set +u; source /etc/profile; [ -n "$_u" ] && set -u; fi
+module load pawseyenv/2024.05 singularity/4.1.0-slurm
+command -v singularity >/dev/null || { echo "singularity not found after module load" >&2; exit 1; }
 module load rclone/1.68.1
-module load singularity/4.1.0-slurm
 RUN="singularity exec $MYSOFTWARE/sif_lib/gdal-r-python-extras_2026-10-25.sif"
 
 ## trend.sst must be installed where the container's R can see it, e.g.

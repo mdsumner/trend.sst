@@ -11,7 +11,11 @@
 ## Regenerate docs/data from the LOCAL sums on scratch (no cache pull)
 ## and commit. Submit from the repo root after a backfill:
 ##   sbatch data-raw/export_site.sh
-module load singularity/4.1.0-slurm
+## Setonix modules: singularity/4.1.0-slurm needs pawseyenv/2024.05 (the
+## default pawseyenv moved on), and a non-login shell needs Lmod first
+if ! type module >/dev/null 2>&1; then _u=${-//[^u]/}; set +u; source /etc/profile; [ -n "$_u" ] && set -u; fi
+module load pawseyenv/2024.05 singularity/4.1.0-slurm
+command -v singularity >/dev/null || { echo "singularity not found after module load" >&2; exit 1; }
 RUN="singularity exec $MYSOFTWARE/sif_lib/gdal-r-python-extras_2026-10-25.sif"
 export R_LIBS_USER=${R_LIBS_USER:-$MYSOFTWARE/r-lib}
 
