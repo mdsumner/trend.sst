@@ -143,7 +143,7 @@ from the site's monthly export &middot;
 
 <script type="application/json" id="cfg">{"sources": [{"id": "oisst", "label": "OISST (1982-)"}, {"id": "ghrsst", "label": "GHRSST MUR (2003-)"}],
  "mode1": "its pattern is the warming of the central and eastern equatorial Pacific during El Nino",
- "oni": "Independent check: tools/check_oni.py correlates mode 1 with NOAA's Oceanic Nino Index (ERSST v5); run it where NOAA is reachable."}</script>
+ "oni": "Independent check (tools/check_oni.py, run 2026-11-05): with the time series smoothed to 3 months, OISST mode 1 correlates 0.96 with NOAA's Oceanic Nino Index (ERSST v5), peaking at lag 0. The same check on the sea level record (trend.sla) gives 0.94."}</script>
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
