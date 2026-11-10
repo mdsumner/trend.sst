@@ -10,6 +10,6 @@ Description: Area-weighted daily sea surface temperature aggregated to a
     rollup is exact arithmetic on the sums.
 License: MIT + file LICENSE
 Encoding: UTF-8
-Imports: s2, vapour, vaster, arrow, dplyr
-Suggests: sds, mirai
+Imports: s2, vapour, vaster, arrow, dplyr, matrixStats
+Suggests: sds, mirai, heatwaveR, gdalraster
 Config/roxygen2/version: 8.1.0
