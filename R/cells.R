@@ -41,6 +41,11 @@ cells_covering <- function(registry, geog) {
   level <- registry$level[1]
   cov <- s2::s2_covering_cell_ids(geog, min_level = level,
                                   max_level = level, max_cells = 100000L)
-  tok <- as.character(s2::s2_cell_union_normalize(cov)[[1]])
-  tok[tok %in% registry$cell]
+  ## unclass: `[[` on an s2_cell_union (wk_vctr) returns another union,
+  ## not its s2_cell vector. No s2_cell_union_normalize(): it merges full
+  ## sibling sets into the parent level, which the registry never holds.
+  ## min_level == max_level already gives exactly `level` cells.
+  tok <- unique(as.character(unlist(lapply(unclass(cov), as.character))))
+  stopifnot(all(nchar(tok) == nchar(registry$cell[1])))
+  sort(tok[tok %in% registry$cell])
 }
