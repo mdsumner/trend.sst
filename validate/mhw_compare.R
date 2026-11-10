@@ -1,13 +1,15 @@
-## Marine heatwaves, Tasman pilot, step 4b: pixel MHWs (MUR, 2003-2025
-## baseline) vs the box-mean series, with OISST (1982-2011) as the
+## Marine heatwaves, step 6: a region's pixel MHWs (MUR, 2003-2025
+## baseline) vs its box-mean series, with OISST (1982-2011) as the
 ## paired classic reference.
 ##
-## Rscript validate/mhw_tasman_compare.R  -> prints checks + figure
-##   cache/mhw/tasman/mhw_tasman_2015_16.png
+## Rscript validate/mhw_compare.R <region>  -> prints checks + one figure
+##   per focus window: cache/mhw/<region>/mhw_<region>_<window>.png
 
 suppressMessages(devtools::load_all(quiet = TRUE))
 library(heatwaveR)
-root <- file.path("cache", "mhw", "tasman")
+args <- commandArgs(trailingOnly = TRUE)
+region <- mhw_region(if (length(args)) args[1] else "tasman")
+root <- region$root
 px <- read.csv(file.path(root, "pixel_daily.csv")); px$date <- as.Date(px$date)
 bx <- read.csv(file.path(root, "boxmean.csv")); bx$date <- as.Date(bx$date)
 maps <- readRDS(file.path(root, "pixel_maps.rds"))
@@ -31,28 +33,28 @@ px$frac <- px$sumw_mhw / px$sumw
 px$box_event <- box$ev$event
 cat(sprintf("2. whole record: mean area fraction in MHW %.3f; box-mean MHW day fraction %.3f\n",
             mean(px$frac), mean(px$box_event)))
-w <- px$date >= as.Date("2015-09-01") & px$date <= as.Date("2016-05-31")
-cat(sprintf("   Sep 2015-May 2016 (%i days): mean area fraction %.2f; days >= 50%% area %i; days with any pixel %i; box-mean MHW days %i\n",
-            sum(w), mean(px$frac[w]), sum(px$frac[w] >= 0.5), sum(px$frac[w] > 0),
-            sum(px$box_event[w])))
 cat(sprintf("   area fraction on box-mean MHW days %.2f vs other days %.2f\n",
             mean(px$frac[px$box_event]), mean(px$frac[!px$box_event])))
 
-## 3. per-pixel 2015/16 window stats
-s <- function(m) round(stats::quantile(m, c(0, .1, .5, .9, 1), na.rm = TRUE), 2)
-cat("3. per-pixel, Aug 2015-Jun 2016 (quantiles 0/10/50/90/100%):\n")
-cat("   MHW days:      ", s(maps$ev1516_days), "\n")
-cat("   longest event: ", s(maps$ev1516_longest), "\n")
-cat("   max anom (C):  ", s(maps$ev1516_max_anom), "\n")
-cat("   max category:  ", table(maps$ev1516_max_cat, useNA = "no"), "(0..4)\n")
-cat(sprintf("   pixels with a single event >= 200 days: %.1f%% of ocean\n",
-            100 * mean(maps$ev1516_longest >= 200, na.rm = TRUE)))
-
-## 4. 2026
-k26 <- px$date >= as.Date("2026-05-23")
-cat(sprintf("4. 2026 (from 2026-05-23 to %s): mean area fraction %.2f; last day %.2f; pixels in MHW on last day %.1f%%\n",
-            format(max(px$date)), mean(px$frac[k26]), tail(px$frac, 1),
-            100 * mean(maps$in_mhw_last, na.rm = TRUE)))
+## 3. per focus window: area in MHW, and per-pixel stats
+s5 <- function(m) round(stats::quantile(m, c(0, .1, .5, .9, 1), na.rm = TRUE), 2)
+for (nm in names(region$windows)) {
+  win <- region$windows[[nm]]; ws <- as.Date(win$stats)
+  w <- px$date >= ws[1] & px$date <= ws[2]
+  pk <- which(w)[which.max(px$frac[w])]
+  cat(sprintf("3. %s, %s..%s (%i days of data):\n", win$label, ws[1],
+              format(min(ws[2], max(px$date))), sum(w)))
+  cat(sprintf("   area in MHW: mean %.2f, peak %.2f on %s (cat III+IV %.3f); days >= 50%% area %i; box-mean MHW days %i\n",
+              mean(px$frac[w]), px$frac[pk], format(px$date[pk]),
+              (px$sumw_cat3[pk] + px$sumw_cat4[pk]) / px$sumw[pk],
+              sum(px$frac[w] >= 0.5), sum(px$box_event[w])))
+  cat("   per-pixel quantiles 0/10/50/90/100%:\n")
+  cat("     MHW days:      ", s5(maps[[paste0(nm, "_days")]]), "\n")
+  cat("     longest event: ", s5(maps[[paste0(nm, "_longest")]]), "\n")
+  cat("     max anom (C):  ", s5(maps[[paste0(nm, "_max_anom")]]), "\n")
+  cat("     max category 0..4:", tabulate(maps[[paste0(nm, "_max_cat")]] + 1L, 5L), "\n")
+}
+cat(sprintf("4. last day %s: area in MHW %.2f\n", format(max(px$date)), tail(px$frac, 1)))
 
 ## 5. annual: mean pixel MHW days vs box-mean MHW days
 ad <- apply(maps$annual_days, 3, mean, na.rm = TRUE)
@@ -60,9 +62,11 @@ yb <- tapply(px$box_event, format(px$date, "%Y"), sum)
 cat("5. annual MHW days, mean pixel vs box-mean:\n")
 print(round(rbind(pixel_mean = ad, box_mean = yb[names(ad)]), 0))
 
-## OISST classic reference on the 10 centre-in-box cells
+## OISST classic reference on the S2 cells with centres in the box
 reg <- arrow::read_parquet("s2_registry.parquet")
-cin <- reg$cell[reg$lon >= 147 & reg$lon < 157 & reg$lat >= -45 & reg$lat < -37]
+b <- region$bbox
+cin <- reg$cell[reg$lon >= b[["xmin"]] & reg$lon < b[["xmax"]] &
+                reg$lat >= b[["ymin"]] & reg$lat < b[["ymax"]]]
 so <- series_stats("sums/oisst", cin)
 oi <- hw(as.Date(so$date), so$mean, c("1982-01-01", "2011-12-31"))
 
@@ -79,7 +83,10 @@ spans <- function(ev, x0, x1) {
   data.frame(s = pmax(as.Date(e$date_start), x0), e = pmin(as.Date(e$date_end), x1))
 }
 ## one colour scale for every map so windows are comparable
-zmax_all <- ceiling(max(maps$ev1516_days, maps$ev2026_days, na.rm = TRUE) / 50) * 50
+zmax_all <- ceiling(max(unlist(maps[paste0(names(region$windows), "_days")]),
+                        na.rm = TRUE) / 50) * 50
+box_lab <- sprintf("%g–%g°E, %g–%g°S", region$lon0, max(region$lon) + 0.01,
+                   -region$lat0, -min(region$lat) + 0.01)
 
 plot_window <- function(x0, x1, map_key, title, map_title, file, tick_by) {
   pw <- px[px$date >= x0 & px$date <= x1, ]
@@ -110,7 +117,7 @@ plot_window <- function(x0, x1, map_key, title, map_title, file, tick_by) {
          round(100 * cum[nrow(cum), 4])), adj = c(0, 0.5), cex = 0.7, col = ink2, xpd = NA)
   }
   mtext(title, side = 3, line = 2.1, adj = 0, col = ink, font = 2, cex = 0.95)
-  mtext("MUR 0.01°, per-pixel Hobday (2016) events, baseline 2003–2025; 147–157°E, 37–45°S",
+  mtext(paste0("MUR 0.01°, per-pixel Hobday (2016) events, baseline 2003–2025; ", box_lab),
         side = 3, line = 1.0, adj = 0, col = ink2, cex = 0.72)
   legend("topright", inset = c(0, -0.02), legend = c("I Moderate", "II Strong", "III Severe", "IV Extreme"),
          fill = cat_col, border = NA, bty = "n", horiz = TRUE, cex = 0.72,
@@ -138,7 +145,7 @@ plot_window <- function(x0, x1, map_key, title, map_title, file, tick_by) {
   par(mar = c(3, 3.2, 3.6, 4.6))
   z <- maps[[map_key]]
   brks <- seq(0, zmax_all, length.out = 15)
-  plot(range(maps$lon), range(maps$lat), type = "n", asp = 1 / cos(41 * pi / 180),
+  plot(range(maps$lon), range(maps$lat), type = "n", asp = 1 / cos(mean(maps$lat) * pi / 180),
        xaxs = "i", yaxs = "i", axes = FALSE, xlab = "", ylab = "")
   ## land only inside the data window (the plot region beyond it is not land)
   rect(min(maps$lon) - 0.005, min(maps$lat) - 0.005, max(maps$lon) + 0.005,
@@ -160,12 +167,16 @@ plot_window <- function(x0, x1, map_key, title, map_title, file, tick_by) {
   cat("figure:", file, "\n")
 }
 
-plot_window(as.Date("2015-08-01"), as.Date("2016-07-31"), "ev1516_days",
-            "Tasman Sea 2015/16: share of box in marine heatwave, by category",
-            "MHW days per pixel, Aug 2015–Jun 2016",
-            file.path(root, "mhw_tasman_2015_16.png"), "2 months")
 last <- max(px$date)
-plot_window(as.Date("2026-01-01"), as.Date("2026-12-31"), "ev2026_days",
-            sprintf("Tasman Sea 2026 (to %s): share of box in marine heatwave", format(last, "%d %b")),
-            sprintf("MHW days per pixel, 1 Jan–%s 2026", format(last, "%d %b")),
-            file.path(root, "mhw_tasman_2026.png"), "2 months")
+for (nm in names(region$windows)) {
+  win <- region$windows[[nm]]; wp <- as.Date(win$plot)
+  partial <- last < as.Date(win$stats[2])
+  map_label <- if (is.null(win$map_label)) {
+    sprintf("%s–%s", format(as.Date(win$stats[1]), "%d %b"), format(min(last, as.Date(win$stats[2])), "%d %b %Y"))
+  } else win$map_label
+  plot_window(wp[1], wp[2], paste0(nm, "_days"),
+              sprintf("%s %s%s: share of box in marine heatwave", region$title, win$label,
+                      if (partial) sprintf(" (to %s)", format(last, "%d %b")) else ""),
+              paste("MHW days per pixel,", map_label),
+              file.path(root, sprintf("mhw_%s_%s.png", region$name, nm)), "2 months")
+}

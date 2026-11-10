@@ -1,4 +1,4 @@
-## Marine heatwaves, Tasman pilot, step 2a: fetch the region window from
+## Marine heatwaves, step 1: fetch a region's window (R/mhw.R mhw_region()) from
 ## every MUR COG as raw Int16 (scale 0.001, offset 25 -> Celsius; nodata
 ## -32768). One file per date, atomic write, rerun-to-resume: existing
 ## files are skipped, failed dates just retry next run.
@@ -7,20 +7,19 @@
 ## has its origin at (-179.995, 89.995), so pixel centres sit on whole
 ## hundredths: col j (0-based) centre = -179.99 + 0.01 j,
 ##                row i (0-based) centre =   89.99 - 0.01 i.
-## xoff 32699, yoff 12699, 1000 x 800 -> centres lon 147.00..156.99,
-## lat -37.00..-44.99 (the core of the 2015/16 event off eastern Tasmania).
+## e.g. tasman: xoff 32699, yoff 12699, 1000 x 800 -> centres lon
+## 147.00..156.99, lat -37.00..-44.99.
 ##
 ## Known-bad dates are NOT masked here: the store is raw, flagging happens
 ## at analysis time (same rule as the sums).
 ##
-## Rscript data-raw/mhw_tasman_fetch.R [n_workers]
+## Rscript data-raw/mhw_fetch.R <region> [n_workers]
 
+source("R/mhw.R")
 args <- commandArgs(trailingOnly = TRUE)
-n_workers <- if (length(args)) as.integer(args[1]) else 24L
-
-region <- list(name = "tasman", xoff = 32699L, yoff = 12699L,
-               nx = 1000L, ny = 800L)
-out_dir <- file.path("cache", "mhw", region$name, "dates")
+region <- mhw_region(if (length(args)) args[1] else "tasman")
+n_workers <- if (length(args) > 1) as.integer(args[2]) else 24L
+out_dir <- file.path(region$root, "dates")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 files <- sds::ghrsst()

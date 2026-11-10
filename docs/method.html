@@ -88,7 +88,7 @@
 <div class="viz-root"><div class="wrap">
 <header>
   <h1>trend.sst</h1>
-  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="method.html" class="on">Method</a><a href="modes.html">Modes</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html">Heatwaves</a><a href="method.html" class="on">Method</a><a href="modes.html">Modes</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
 </header>
 <p class="sub">How daily satellite pixels become the statistically-ready
 cell sums everything on this site is computed from.</p>
@@ -279,6 +279,74 @@ recomputation; cell sums are computed once and answer every region
 after the fact. For boundary-sensitive work the pixel tier remains
 upstream, untouched.</p>
 
+<h2 id="heatwaves">Marine heatwaves: where the sums stop</h2>
+<p>A marine heatwave (Hobday et al. 2016) is a run of five or more days
+above the 90th percentile of the local seasonal climatology, built from
+an 11-day window around each day of the year over a baseline period,
+with gaps of two days or fewer joined. The mean climatology is linear
+and falls straight out of the sums. <b>The percentile does not</b>:
+quantiles are not mergeable, so the sums cannot produce a heatwave
+threshold for a union of cells, and the heatwaves of a union are not the
+union of the cells' heatwaves. Two tiers follow from that.</p>
+
+<div class="card">
+<p><b>Cell or region means</b>: a selection's daily series (exact, from
+the sums) run through the standard method. Cheap, any region, any
+source, but the averaging damps the extremes.</p>
+<p><b>Pixel deep dives</b>: a regional window of GHRSST MUR at native
+0.01&deg; (about a million pixels, the full 2002&ndash; record),
+transposed into a time-chunked store so every pixel gets its own
+climatology, threshold and events. The
+<a href="heatwaves.html">Heatwaves</a> page shows these.</p>
+</div>
+
+<p>The per-pixel engine is a vectorised reimplementation of the
+<a href="https://robwschlegel.github.io/heatwaveR/">heatwaveR</a>
+defaults (Schlegel &amp; Smit 2018). The day-of-year window indices are
+the same for every pixel, so a 50&times;50-pixel chunk shares them and
+the climatology becomes matrix column operations. It is checked against
+heatwaveR itself: on each region's box mean and 40 random pixels the
+climatology, threshold and every event day match exactly. A second
+check costs nothing: the climatology is linear, so the area-weighted
+mean of the pixel anomalies must equal the box-mean anomaly, and does,
+to 0.0001&nbsp;&deg;C (heatwaveR's rounding). Event days are then
+summed into the same kind of additive daily totals as everything else:
+weighted area in a heatwave, by category (Hobday et al. 2018).</p>
+
+<p><b>The baseline is the result, not a detail.</b> MUR begins in 2002,
+so it cannot use the conventional 1982&ndash;2011 climatology, and
+trend.sst does not mix products to fake one. MUR runs on its own
+2003&ndash;2025 baseline, with OISST on 1982&ndash;2011 shown alongside
+as the classic reference. In the Tasman Sea, OISST on 1982&ndash;2011
+sees 2015/16 as a single event (2015-09-09 to 2016-07-22, 318 days,
+peak +2.99&nbsp;&deg;C, matching Oliver et al. 2017). On
+2003&ndash;2025, <i>both</i> products split the same period into
+6&ndash;8 shorter events, because the later baseline already contains
+the warm years after 2016 and so sets a higher threshold. MUR heatwaves here
+are heatwaves relative to recent climate.</p>
+
+<figure>
+<img src="img/mhw_tasman_ev1516.png" alt="Tasman Sea 2015/16: daily share of box in marine heatwave by category, box-mean and OISST event timelines, and a map of heatwave days per pixel" style="width:100%;height:auto;border-radius:6px">
+<figcaption>Tasman Sea, 2015/16. Left: the share of the box in heatwave
+conditions each day, by category, with the box-mean event timelines
+below (MUR on its own baseline; OISST on 1982&ndash;2011). Right:
+heatwave days per pixel. The interactive version is on the
+<a href="heatwaves.html">Heatwaves</a> page;
+<a href="img/mhw_wa_ev1011.png">Western Australia 2010/11</a> as a
+second region.</figcaption>
+</figure>
+
+<p><b>What averaging hides.</b> In the 2015/16 Tasman event the median
+pixel's peak anomaly was +3.3&nbsp;&deg;C, against +1.9&nbsp;&deg;C for
+the box-averaged series, so about 40% of the intensity disappears in
+the mean. The difference also runs the other way. Averaging lowers the
+variance and so the threshold, so broad mild warming can put the box
+mean in a heatwave while few individual pixels are (Tasman 2014: 96
+box-mean days against 40 for the average pixel). Western Australia
+2010/11 (Pearce &amp; Feng 2013) is the second check: up to 85% of the
+box in heatwave conditions, the box-mean event peaking on 2011-03-02,
+OISST's on 2011-02-28, and the most heatwave days along the coast.</p>
+
 <h2>References</h2>
 <p>Campbell, J.W., Blaisdell, J.M. and Darzi, M. (1995).
 <i>Level-3 SeaWiFS Data Products: Spatial and Temporal Binning
@@ -299,6 +367,23 @@ statistics. <i>Philosophical Transactions of the Royal Society A</i>
 222, 309&ndash;368 &mdash; where "sufficient statistic" gets its name
 and its meaning: the stored sums carry everything the data had to say
 about the quantities reported.</p>
+<p>Hobday, A.J. et al. (2016). A hierarchical approach to defining
+marine heatwaves. <i>Progress in Oceanography</i> 141, 227&ndash;238
+&mdash; the definition used for the heatwave tier.</p>
+<p>Hobday, A.J. et al. (2018). Categorizing and naming marine
+heatwaves. <i>Oceanography</i> 31(2), 162&ndash;173 &mdash; categories
+I&ndash;IV as multiples of the threshold's distance above the climatology.</p>
+<p>Oliver, E.C.J. et al. (2017). The unprecedented 2015/16 Tasman Sea
+marine heatwave. <i>Nature Communications</i> 8, 16101 &mdash; the
+reference event for the Tasman region.</p>
+<p>Pearce, A.F. and Feng, M. (2013). The rise and fall of the
+&ldquo;marine heat wave&rdquo; off Western Australia during the summer of
+2010/2011. <i>Journal of Marine Systems</i> 111&ndash;112, 139&ndash;156
+&mdash; the reference event for the Western Australia region.</p>
+<p>Schlegel, R.W. and Smit, A.J. (2018). heatwaveR: a central algorithm
+for the detection of heatwaves and cold-spells. <i>Journal of Open
+Source Software</i> 3(27), 821 &mdash; the implementation reproduced
+exactly here.</p>
 
 <h2>Acknowledgments</h2>
 <p>This work uses resources of the Pawsey Supercomputing Research

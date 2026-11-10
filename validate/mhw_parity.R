@@ -1,15 +1,16 @@
 ## Parity: R/mhw.R (vectorised) vs heatwaveR ts2clm() + detect_event() on
-## the Tasman box-mean series and random ocean pixels from sst.zarr.
+## a region's box-mean series and random ocean pixels from sst.zarr.
 ## Pass = identical seas/thresh (after heatwaveR's 4-dp rounding) and
 ## identical event-day masks.
 ##
-## Rscript validate/mhw_parity.R [n_pixels]
+## Rscript validate/mhw_parity.R <region> [n_pixels]
 
 suppressMessages(devtools::load_all(quiet = TRUE))
 library(heatwaveR)
 args <- commandArgs(trailingOnly = TRUE)
-n_px <- if (length(args)) as.integer(args[1]) else 40L
-root <- file.path("cache", "mhw", "tasman")
+region <- mhw_region(if (length(args)) args[1] else "tasman")
+n_px <- if (length(args) > 1) as.integer(args[2]) else 40L
+root <- region$root
 store <- file.path(root, "sst.zarr")
 baseline <- c("2003-01-01", "2025-12-31")
 

@@ -1,19 +1,20 @@
-## Marine heatwaves, Tasman pilot, step 3a: box-mean daily series from the
+## Marine heatwaves, step 3: a region's box-mean daily series from the
 ## per-date window files, as sufficient statistics (same schema as the
 ## sums: n, sumw, sumwx, sumwx2, cos-latitude weights), so the mean and
 ## spatial variance are exact arithmetic downstream.
 ##
-## Rscript data-raw/mhw_tasman_boxmean.R  -> cache/mhw/tasman/boxmean.csv
+## Rscript data-raw/mhw_boxmean.R <region>  -> cache/mhw/<region>/boxmean.csv
 
-region <- list(name = "tasman", xoff = 32699L, yoff = 12699L,
-               nx = 1000L, ny = 800L)
-root <- file.path("cache", "mhw", region$name)
+source("R/mhw.R")
+args <- commandArgs(trailingOnly = TRUE)
+region <- mhw_region(if (length(args)) args[1] else "tasman")
+root <- region$root
 files <- sds::ghrsst()
 dates <- as.Date(files$date)
 paths <- file.path(root, "dates", sprintf("%s.i16", format(dates)))
 stopifnot(all(file.exists(paths)))
 
-lat <- round(89.99 - 0.01 * (region$yoff + seq_len(region$ny) - 1L), 2)
+lat <- region$lat
 ## pixel order is x fastest, so latitude repeats per row of nx
 w <- rep(cos(lat * pi / 180), each = region$nx)
 
