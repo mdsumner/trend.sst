@@ -1,21 +1,23 @@
-## Marine heatwaves, Tasman pilot, step 4: per-pixel Hobday MHWs on MUR,
+## Marine heatwaves, step 5: per-pixel Hobday MHWs on MUR for a region,
 ## baseline 2003-01-01..2025-12-31 (MUR-only, per the never-pool rule;
 ## OISST 1982-2011 is the paired classic reference, not mixed in).
 ## R/mhw.R is heatwaveR-exact (validate/mhw_parity.R).
 ##
-## Outputs (cache/mhw/tasman/):
+## Outputs (cache/mhw/<region>/):
 ##   pixel_daily.csv  per date, additive over pixels (cos-lat weights):
 ##                    sumw ocean, sumw in MHW, sumw by category I-IV,
 ##                    sum w*anom (anom = sst - seas)
 ##   pixel_maps.rds   per pixel (lon x lat matrices, NA on land):
 ##                    annual MHW days (array lon x lat x year), event count,
-##                    2015/16 window stats, 2026 stats
+##                    stats per region focus window (R/mhw.R mhw_regions)
 ##
-## Rscript data-raw/mhw_tasman_pixels.R [n_workers]
+## Rscript data-raw/mhw_pixels.R <region> [n_workers]
 
+source("R/mhw.R")
 args <- commandArgs(trailingOnly = TRUE)
-n_workers <- if (length(args)) as.integer(args[1]) else 24L
-root <- file.path("cache", "mhw", "tasman")
+region <- mhw_region(if (length(args)) args[1] else "tasman")
+n_workers <- if (length(args) > 1) as.integer(args[2]) else 24L
+root <- region$root
 store <- file.path(root, "sst.zarr")
 baseline <- c("2003-01-01", "2025-12-31")
 
@@ -28,9 +30,7 @@ dates <- as.Date(rd("time", "integer", nt), origin = "1970-01-01")
 lat <- rd("lat", "double", ny); lon <- rd("lon", "double", nx)
 years <- sort(unique(as.integer(format(dates, "%Y"))))
 
-windows <- list(
-  ev1516 = as.Date(c("2015-08-01", "2016-06-30")),
-  ev2026 = as.Date(c("2026-01-01", "2026-12-31")))
+windows <- lapply(region$windows, function(w) as.Date(w$stats))
 
 do_chunk <- function(cy, cx, store, nt, cxy, lat, dates, baseline, windows) {
   b <- memDecompress(readBin(file.path(store, "sst", sprintf("%i.%i.0", cy, cx)),

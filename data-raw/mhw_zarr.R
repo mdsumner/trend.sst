@@ -1,5 +1,5 @@
-## Marine heatwaves, Tasman pilot, step 2b: transpose the per-date window
-## files (data-raw/mhw_tasman_fetch.R) into a time-chunked Zarr v2 store,
+## Marine heatwaves, step 2: transpose a region's per-date window
+## files (data-raw/mhw_fetch.R) into a time-chunked Zarr v2 store,
 ## so each pixel's full series is contiguous inside one chunk.
 ##
 ## Hand-written Zarr v2 (Rarr cannot write int16): zlib codec (R's
@@ -12,11 +12,12 @@
 ##
 ## Raw, unmasked: known-bad dates are flagged at analysis time.
 ##
-## Rscript data-raw/mhw_tasman_zarr.R
+## Rscript data-raw/mhw_zarr.R <region>
 
-region <- list(name = "tasman", xoff = 32699L, yoff = 12699L,
-               nx = 1000L, ny = 800L)
-root <- file.path("cache", "mhw", region$name)
+source("R/mhw.R")
+args <- commandArgs(trailingOnly = TRUE)
+region <- mhw_region(if (length(args)) args[1] else "tasman")
+root <- region$root
 date_dir <- file.path(root, "dates")
 store <- file.path(root, "sst.zarr")
 chunk_xy <- 50L
@@ -61,14 +62,15 @@ unlink(store, recursive = TRUE)
 dir.create(store, recursive = TRUE)
 writeLines(json(list(zarr_format = 2L)), file.path(store, ".zgroup"))
 writeLines(json(list(
-  title = "GHRSST MUR L4 v04.1 analysed_sst, Tasman window, time-chunked",
+  title = sprintf("GHRSST MUR L4 v04.1 analysed_sst, %s window, time-chunked", region$title),
   source = "https://data.source.coop/ausantarctic/ghrsst-mur-v2/ analysed_sst COGs (sds::ghrsst())",
-  window = region, history = sprintf("data-raw/mhw_tasman_zarr.R %s",
+  window = region[c("name", "xoff", "yoff", "nx", "ny")],
+  history = sprintf("data-raw/mhw_zarr.R %s",
                                      format(Sys.time(), tz = "UTC")))),
   file.path(store, ".zattrs"))
 
-lon <- round(-179.99 + 0.01 * (region$xoff + seq_len(region$nx) - 1L), 2)
-lat <- round(89.99 - 0.01 * (region$yoff + seq_len(region$ny) - 1L), 2)
+lon <- region$lon
+lat <- region$lat
 write_array("lon", region$nx, region$nx, "<f8", NULL,
             list(`_ARRAY_DIMENSIONS` = list("lon"), units = "degrees_east"),
             function(dir) put_chunk(dir, "0", writeBin(lon, raw())))

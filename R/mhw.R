@@ -104,3 +104,41 @@ mhw_detect <- function(x, dates, clim) {
   storage.mode(cat) <- "integer"
   list(event = ev, category = cat, anom = x - seas)
 }
+
+#' MHW pilot regions on the native MUR grid. A region is a pixel window
+#' (origin -179.995, 89.995, 0.01 deg: pixel centres on whole hundredths)
+#' plus the event windows its figures and per-pixel stats focus on.
+#' lon0/lat0 are the NW pixel centre; nx/ny must be multiples of 50 (the
+#' Zarr chunk). Each window: stats = dates for per-pixel stats, plot =
+#' dates for the time-series panel.
+mhw_regions <- list(
+  tasman = list(
+    title = "Tasman Sea", lon0 = 147, lat0 = -37, nx = 1000L, ny = 800L,
+    windows = list(
+      ev1516 = list(label = "2015/16", stats = c("2015-08-01", "2016-06-30"),
+                    plot = c("2015-08-01", "2016-07-31"), map_label = "Aug 2015–Jun 2016"),
+      ev2026 = list(label = "2026", stats = c("2026-01-01", "2026-12-31"),
+                    plot = c("2026-01-01", "2026-12-31"), map_label = NULL))),
+  wa = list(
+    title = "Western Australia", lon0 = 106, lat0 = -21, nx = 1000L, ny = 1200L,
+    windows = list(
+      ev1011 = list(label = "2010/11", stats = c("2010-12-01", "2011-05-31"),
+                    plot = c("2010-11-01", "2011-06-30"), map_label = "Dec 2010–May 2011"),
+      ev2026 = list(label = "2026", stats = c("2026-01-01", "2026-12-31"),
+                    plot = c("2026-01-01", "2026-12-31"), map_label = NULL))))
+
+mhw_region <- function(name) {
+  r <- mhw_regions[[name]]
+  if (is.null(r)) stop("unknown region '", name, "'; have: ",
+                       paste(names(mhw_regions), collapse = ", "))
+  stopifnot(r$nx %% 50L == 0L, r$ny %% 50L == 0L)
+  r$name <- name
+  r$xoff <- as.integer(round((r$lon0 + 179.99) * 100))
+  r$yoff <- as.integer(round((89.99 - r$lat0) * 100))
+  r$lon <- round(r$lon0 + 0.01 * (seq_len(r$nx) - 1L), 2)
+  r$lat <- round(r$lat0 - 0.01 * (seq_len(r$ny) - 1L), 2)
+  r$bbox <- c(xmin = r$lon0 - 0.005, xmax = max(r$lon) + 0.005,
+              ymin = min(r$lat) - 0.005, ymax = r$lat0 + 0.005)
+  r$root <- file.path("cache", "mhw", name)
+  r
+}
