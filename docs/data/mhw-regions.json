@@ -1,0 +1,15 @@
+{
+  "tasman": {
+    "title": "Tasman Sea",
+    "last": "2026-11-07",
+    "windows": [
+      "ev1516",
+      "ev2026"
+    ]
+  },
+  "wa": {
+    "title": "Western Australia",
+    "last": "2026-11-08",
+    "windows": ["ev1011", "ev2026"]
+  }
+}

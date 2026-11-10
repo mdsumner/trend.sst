@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trend.sst - marine heatwaves</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f0efec;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
+    --grid: #e4e3de; --border: #d8d7d0; --baseline: #c3c2b7; --land: #e1e0d9;
+    /* category I-IV: ordinal blue, 250 -> 700 (lightest clears 2:1) */
+    --cat-1: #86b6ef; --cat-2: #3987e5; --cat-3: #1c5cab; --cat-4: #0d366b;
+    /* sequential map ramp, near-zero recedes toward the surface */
+    --seq-0: #cde2fb; --seq-1: #9ec5f4; --seq-2: #6da7ec; --seq-3: #3987e5;
+    --seq-4: #256abf; --seq-5: #184f95; --seq-6: #0d366b;
+  }
+</style>
+<style>
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+      --grid: #32322f; --border: #3d3d39; --baseline: #383835; --land: #2c2c2a;
+      /* on dark, magnitude steps toward light; darkest kept >= step 600 */
+      --cat-1: #184f95; --cat-2: #256abf; --cat-3: #5598e7; --cat-4: #9ec5f4;
+      --seq-0: #104281; --seq-1: #184f95; --seq-2: #256abf; --seq-3: #3987e5;
+      --seq-4: #6da7ec; --seq-5: #9ec5f4; --seq-6: #cde2fb;
+    }
+  }
+  html, body { margin: 0; }
+  .viz-root {
+    background: var(--surface-1); color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; padding: 20px 24px 48px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; padding-bottom: 8px; }
+  header { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tabs { display: flex; gap: 4px; align-items: flex-end; flex: 1; }
+  .tabs a { padding: 7px 14px; color: var(--text-secondary);
+    text-decoration: none; font-size: 13px; border: 1px solid transparent;
+    border-radius: 8px 8px 0 0; margin-bottom: -1px; white-space: nowrap; }
+  .tabs a:hover { color: var(--text-primary); }
+  .tabs a.on { background: var(--surface-1); border-color: var(--border);
+    border-bottom-color: var(--surface-1); color: var(--text-primary);
+    font-weight: 600; }
+  .tabs a.ext { margin-left: auto; align-self: center; margin-bottom: 7px;
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+    font-size: 12px; color: var(--series-1); background: var(--surface-2); }
+  .tabs a.ext::after { content: " \2197"; }
+  .tabs a.ext:hover { border-color: var(--series-1); }
+  .tabs a.gh { align-self: center; margin-bottom: 7px; margin-left: 8px;
+    display: inline-flex; padding: 4px; color: var(--text-secondary);
+    border: none; }
+  .tabs a.gh:hover { color: var(--text-primary); }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 14px; max-width: 80ch; }
+  a { color: var(--series-1); }
+  .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+              margin: 8px 0 14px; font-size: 13px; color: var(--text-secondary); }
+  .controls label { display: inline-flex; gap: 6px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+         overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text-secondary);
+                padding: 5px 12px; font: inherit; cursor: pointer; }
+  .seg button.on { background: var(--surface-2); color: var(--text-primary);
+                   font-weight: 600; }
+  select { font: inherit; color: var(--text-primary); background: var(--surface-2);
+           border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+           gap: 12px; margin-bottom: 20px; }
+  .tile { background: var(--surface-2); border: 1px solid var(--border);
+          border-radius: 10px; padding: 12px 16px; }
+  .tile .name { font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+                color: var(--text-secondary); }
+  .tile .big { font-size: 26px; font-weight: 650; margin: 2px 0; }
+  .tile .meta { color: var(--text-secondary); font-size: 12.5px; }
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+           gap: 28px; align-items: start; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+  section { margin: 22px 0; }
+  h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
+  .note { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 10px; max-width: 80ch; }
+  svg, canvas { display: block; }
+  .legend { display: flex; gap: 14px; align-items: center; font-size: 12.5px;
+            color: var(--text-secondary); margin-top: 6px; flex-wrap: wrap; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+                margin-right: 5px; vertical-align: -2px; }
+  .mapbox { position: relative; }
+  #map { width: 100%; image-rendering: auto; border-radius: 4px; cursor: crosshair; }
+  .cbar { display: flex; align-items: center; gap: 8px; margin-top: 8px;
+          font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .cbar .ramp { flex: 1; height: 10px; border-radius: 3px; }
+  .tooltip { position: fixed; pointer-events: none; background: var(--surface-2);
+             border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px;
+             font-size: 12.5px; color: var(--text-primary); display: none;
+             box-shadow: 0 2px 10px rgba(0,0,0,.12); z-index: 5;
+             font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; font-size: 13px; margin: 6px 0 0;
+          font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 5px 18px 5px 0; border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12px;
+       letter-spacing: .03em; text-transform: uppercase; }
+  td .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block;
+            margin-right: 6px; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+  .err { background: var(--surface-2); border: 1px solid var(--border);
+         border-radius: 10px; padding: 16px; color: var(--text-secondary); }
+  .card { background: var(--surface-2); border: 1px solid var(--border);
+          border-radius: 10px; padding: 12px 16px; font-size: 13px;
+          color: var(--text-secondary); max-width: 80ch; }
+  .card p { margin: 6px 0; }
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 34px; }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+<header>
+  <h1>trend.sst</h1>
+  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html" class="on">Heatwaves</a><a href="method.html">Method</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+</header>
+<p class="sub">Marine heatwaves (Hobday et al. 2016) computed per pixel on
+GHRSST MUR at its native 0.01&deg;, for regional deep dives. A pixel is in a
+heatwave when its SST stays above the 90th percentile of its own seasonal
+climatology for 5+ days. Baseline: MUR's own 2003&ndash;2025; OISST on the
+classic 1982&ndash;2011 baseline is shown alongside, never mixed in.
+<a href="method.html#heatwaves">How this is computed</a>.</p>
+
+<div id="content">
+  <div class="controls">
+    <label>Region <select id="regsel"></select></label>
+    <span class="seg" id="winseg"></span>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <div class="grid2">
+    <section>
+      <h2 id="ts-title">Share of box in marine heatwave</h2>
+      <p class="note" id="ts-note"></p>
+      <svg id="ts"></svg>
+      <div class="legend" id="ts-leg"></div>
+    </section>
+    <section>
+      <h2 id="map-title">Per pixel</h2>
+      <p class="note" id="map-note"></p>
+      <div class="controls" style="margin:0 0 8px">
+        <span class="seg" id="metseg">
+          <button data-m="days" class="on">MHW days</button>
+          <button data-m="anom">Peak anomaly</button></span>
+      </div>
+      <div class="mapbox"><canvas id="map" role="img"></canvas></div>
+      <div class="cbar"><span id="cb-lo">0</span><span class="ramp" id="cb-ramp"></span><span id="cb-hi"></span></div>
+    </section>
+  </div>
+  <section>
+    <h2>Every year: pixel mean vs box mean</h2>
+    <p class="note">Heatwave days per year. <b>Pixel mean</b>: the average pixel's
+    heatwave days. <b>Box mean</b>: heatwave days of the single box-averaged
+    series. Averaging lowers the variance and so the threshold, so broad mild
+    warming can put the box mean in a heatwave while few pixels are.</p>
+    <svg id="annual"></svg>
+    <div class="legend" id="an-leg"></div>
+  </section>
+  <section>
+    <h2>Events in this window</h2>
+    <p class="note">Box-mean events (the table view of the timeline strips).
+    Intensity is &deg;C above the seasonal climatology.</p>
+    <div id="evtable"></div>
+  </section>
+  <section>
+    <div class="card" id="baseline-card"></div>
+  </section>
+  <section>
+    <details><summary>Static figures</summary><div id="pngs"></div></details>
+  </section>
+</div>
+<div class="tooltip" id="tip"></div>
+<footer>trend.sst &middot; heatwave snapshot generated <span id="gen"></span>
+by data-raw/export_mhw.R &middot; per-pixel Hobday events on GHRSST MUR v4.1 &middot;
+<a href="https://github.com/mdsumner/trend.sst">source</a></footer>
+</div></div>
+<script>
+const $ = s => document.querySelector(s);
+const css = v => getComputedStyle($(".viz-root")).getPropertyValue(v).trim();
+const tip = $("#tip");
+const showTip = (html, x, y) => { tip.innerHTML = html; tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(x + 14, innerWidth - r.width - 8) + "px";
+  tip.style.top = (y + 14) + "px"; };
+const hideTip = () => tip.style.display = "none";
+const DAY = 864e5;
+const fmtD = d3.utcFormat("%-d %b %Y");
+const pct = v => (100 * v).toFixed(v < 0.1 ? 1 : 0) + "%";
+const CATS = ["I Moderate", "II Strong", "III Severe", "IV Extreme"];
+const state = { region: null, win: null, metric: "days" };
+const cache = {};
+
+fetch("data/mhw-regions.json").then(r => r.ok ? r.json() : Promise.reject("mhw-regions.json"))
+  .then(idx => {
+    const sel = $("#regsel");
+    for (const [k, v] of Object.entries(idx)) {
+      const o = document.createElement("option"); o.value = k; o.textContent = v.title;
+      sel.appendChild(o);
+    }
+    const want = new URLSearchParams(location.search).get("region");
+    state.region = want in idx ? want : Object.keys(idx)[0];
+    sel.value = state.region;
+    sel.addEventListener("change", e => { state.region = e.target.value; state.win = null; load(); });
+    $("#metseg").addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      state.metric = b.dataset.m;
+      for (const x of $("#metseg").children) x.classList.toggle("on", x === b);
+      drawMap();
+    });
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+    let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawAll, 120); });
+    load();
+  })
+  .catch(e => $("#content").innerHTML =
+    `<div class="err">Could not load ${e}. Run data-raw/export_mhw.R.</div>`);
+
+async function load() {
+  const r = state.region;
+  if (!cache[r]) {
+    const j = await fetch(`data/mhw-${r}.json`).then(x => x.json());
+    j.t0 = Date.parse(j.daily.start);
+    j.bins = {};
+    cache[r] = j;
+  }
+  const j = cache[r];
+  $("#gen").textContent = j.generated.replace("T", " ");
+  if (!state.win || !j.windows.find(w => w.key === state.win)) state.win = j.windows[0].key;
+  const seg = $("#winseg"); seg.innerHTML = "";
+  for (const w of j.windows) {
+    const b = document.createElement("button");
+    b.textContent = w.label + (w.partial ? " (so far)" : ""); b.dataset.k = w.key;
+    b.classList.toggle("on", w.key === state.win);
+    b.onclick = () => { state.win = w.key;
+      for (const x of seg.children) x.classList.toggle("on", x === b); drawAll(); };
+    seg.appendChild(b);
+  }
+  history.replaceState(null, "", `?region=${r}`);
+  drawAll();
+}
+
+const J = () => cache[state.region];
+const W = () => J().windows.find(w => w.key === state.win);
+
+function drawAll() {
+  if (!J()) return;
+  drawTiles(); drawTs(); drawMap(); drawAnnual(); drawTable(); drawCards();
+}
+
+function drawTiles() {
+  const j = J(), w = W();
+  const last = new Date(j.t0 + (j.daily.n - 1) * DAY);
+  const iLast = j.daily.n - 1;
+  const fracLast = (j.daily.cat1[iLast] + j.daily.cat2[iLast] + j.daily.cat3[iLast] + j.daily.cat4[iLast]) / 1e4;
+  const tiles = [
+    { name: "Peak share in heatwave", big: pct(w.peak_frac),
+      meta: `${fmtD(new Date(w.peak_date))}; ${pct(w.peak_cat34)} of box at category III+` },
+    { name: "MHW days per pixel", big: `${Math.round(w.days_q[1])}`,
+      meta: `median; 10–90%: ${Math.round(w.days_q[0])}–${Math.round(w.days_q[2])} days` },
+    { name: "Peak anomaly per pixel", big: `${w.anom_q[1].toFixed(1)} °C`,
+      meta: `median; 10–90%: ${w.anom_q[0].toFixed(1)}–${w.anom_q[2].toFixed(1)} °C` },
+    w.partial
+      ? { name: "In heatwave now", big: pct(fracLast), meta: `share of box on ${fmtD(last)}` }
+      : { name: "Box-mean heatwave days", big: `${w.box_days}`,
+          meta: `the box-averaged series, same window` }
+  ];
+  $("#tiles").innerHTML = tiles.map(t => `<div class="tile"><div class="name">${t.name}</div>
+    <div class="big">${t.big}</div><div class="meta">${t.meta}</div></div>`).join("");
+}
+
+function sliceWin() {
+  const j = J(), w = W();
+  const p0 = Date.parse(w.plot[0]), p1 = Date.parse(w.plot[1]);
+  const i0 = Math.max(0, Math.round((p0 - j.t0) / DAY));
+  const i1 = Math.min(j.daily.n - 1, Math.round((p1 - j.t0) / DAY));
+  const rows = [];
+  for (let i = i0; i <= i1; i++) {
+    const c = [j.daily.cat1[i], j.daily.cat2[i], j.daily.cat3[i], j.daily.cat4[i]].map(v => v / 1e4);
+    rows.push({ d: new Date(j.t0 + i * DAY), c, tot: c[0] + c[1] + c[2] + c[3],
+                anom: j.daily.anom[i], box: j.daily.box_mhw[i] });
+  }
+  return { rows, p0: new Date(p0), p1: new Date(p1 + DAY) };
+}
+
+function spans(list, p0, p1) {
+  return list.map(e => ({ s: new Date(Date.parse(e.start)), e: new Date(Date.parse(e.end) + DAY), ev: e }))
+    .filter(e => e.e > p0 && e.s < p1)
+    .map(e => ({ ...e, s: e.s < p0 ? p0 : e.s, e: e.e > p1 ? p1 : e.e }));
+}
+
+function drawTs() {
+  const j = J(), w = W(), { rows, p0, p1 } = sliceWin();
+  $("#ts-title").textContent = `${j.title} ${w.label}: share of box in marine heatwave`;
+  $("#ts-note").textContent = `Daily share of ocean area in heatwave, by category ` +
+    `(${j.ocean_px.toLocaleString()} ocean pixels, ${j.bbox.lon[0]}–${j.bbox.lon[1]}°E, ` +
+    `${-j.bbox.lat[1]}–${-j.bbox.lat[0]}°S). Below: events in the box-averaged series.`;
+  const svg = d3.select("#ts"); svg.selectAll("*").remove();
+  const W0 = $("#ts").parentElement.clientWidth, H = 380, stripH = 74;
+  const m = { t: 10, r: 46, b: 26, l: 112 };
+  svg.attr("width", W0).attr("height", H).attr("role", "img")
+     .attr("aria-label", "share of box in marine heatwave by category over time");
+  const yb = H - m.b - stripH - 12;
+  const x = d3.scaleUtc().domain([p0, p1]).range([m.l, W0 - m.r]);
+  const y = d3.scaleLinear().domain([0, 1]).range([yb, m.t]);
+  const ax = g => { g.selectAll("path,line").attr("stroke", css("--grid"));
+    g.selectAll("text").attr("fill", css("--text-secondary")).attr("font-size", 11); };
+  svg.append("g").attr("transform", `translate(${m.l},0)`)
+    .call(d3.axisLeft(y).tickValues([0, .25, .5, .75, 1]).tickFormat(d3.format(".0%"))
+      .tickSize(-(W0 - m.l - m.r))).call(ax)
+    .call(g => g.select(".domain").remove())
+    .call(g => g.selectAll(".tick line").attr("opacity", .7));
+  const stack = d3.stack().keys([0, 1, 2, 3]).value((r, k) => r.c[k])(rows);
+  const cols = [1, 2, 3, 4].map(k => css(`--cat-${k}`));
+  const area = d3.area().x(r => x(r.data.d)).y0(r => y(r[0])).y1(r => y(r[1])).curve(d3.curveStepAfter);
+  stack.forEach((s, k) => svg.append("path").attr("d", area(s)).attr("fill", cols[k]));
+  svg.append("line").attr("x1", m.l).attr("x2", W0 - m.r).attr("y1", yb).attr("y2", yb)
+    .attr("stroke", css("--baseline"));
+  if (w.partial && rows.length) {
+    const r = rows[rows.length - 1];
+    svg.append("text").attr("x", x(r.d) + 6).attr("y", y(r.tot)).attr("dominant-baseline", "middle")
+      .attr("font-size", 11.5).attr("fill", css("--text-secondary"))
+      .text(`${fmtD(r.d).replace(/ \d{4}$/, "")} ${pct(r.tot)}`);
+  }
+  // strips
+  const s0 = yb + 14, sh = 24;
+  const strip = (row, list, col, label, sub) => {
+    const yy = s0 + row * (sh + 8);
+    svg.append("text").attr("x", m.l - 10).attr("y", yy + sh / 2 - 6).attr("text-anchor", "end")
+      .attr("font-size", 11.5).attr("fill", css("--text-primary")).text(label);
+    svg.append("text").attr("x", m.l - 10).attr("y", yy + sh / 2 + 8).attr("text-anchor", "end")
+      .attr("font-size", 10.5).attr("fill", css("--text-muted")).text(sub);
+    for (const s of spans(list, p0, p1))
+      svg.append("rect").attr("x", x(s.s)).attr("y", yy).attr("height", sh)
+        .attr("width", Math.max(2, x(s.e) - x(s.s) - 2)).attr("rx", 3).attr("fill", col);
+    return yy;
+  };
+  strip(0, j.events.mur, css("--series-2"), "MUR box mean", "base 2003–2025");
+  const yo = strip(1, j.events.oisst, css("--series-3"), "OISST cells", "base 1982–2011");
+  const oEnd = new Date(Date.parse(j.oisst_last) + DAY);
+  if (oEnd < p1) {
+    const pid = "hatch";
+    const pat = svg.append("defs").append("pattern").attr("id", pid).attr("width", 6).attr("height", 6)
+      .attr("patternUnits", "userSpaceOnUse").attr("patternTransform", "rotate(45)");
+    pat.append("rect").attr("width", 6).attr("height", 6).attr("fill", css("--surface-2"));
+    pat.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", 6)
+      .attr("stroke", css("--border")).attr("stroke-width", 2);
+    const xs = x(oEnd < p0 ? p0 : oEnd);
+    svg.append("rect").attr("x", xs).attr("y", yo).attr("width", x(p1) - xs).attr("height", sh)
+      .attr("rx", 3).attr("fill", `url(#${pid})`);
+    const lab = svg.append("text").attr("x", xs + 8).attr("y", yo + sh / 2).attr("dominant-baseline", "middle")
+      .attr("font-size", 11).attr("fill", css("--text-secondary"))
+      .text(`OISST here ends ${fmtD(new Date(Date.parse(j.oisst_last)))}`);
+    const bb = lab.node().getBBox();
+    svg.insert("rect", () => lab.node()).attr("x", bb.x - 4).attr("y", bb.y - 1)
+      .attr("width", bb.width + 8).attr("height", bb.height + 2).attr("rx", 3).attr("fill", css("--surface-1"));
+  }
+  svg.append("g").attr("transform", `translate(0,${H - m.b})`)
+    .call(d3.axisBottom(x).ticks(Math.max(3, Math.floor((W0 - m.l - m.r) / 60))).tickSizeOuter(0)
+      .tickFormat((d, i) => d3.utcFormat(i === 0 || d.getUTCMonth() === 0 ? "%b %Y" : "%b")(d))).call(ax);
+  $("#ts-leg").innerHTML = CATS.map((c, k) =>
+    `<span><span class="sw" style="background:${cols[k]}"></span>${c}</span>`).join("") +
+    `<span><span class="sw" style="background:${css("--series-2")}"></span>MUR box-mean event</span>` +
+    `<span><span class="sw" style="background:${css("--series-3")}"></span>OISST event (classic baseline)</span>`;
+  // hover
+  const hair = svg.append("line").attr("y1", m.t).attr("y2", H - m.b)
+    .attr("stroke", css("--text-muted")).attr("stroke-dasharray", "3 3").style("display", "none");
+  const inEv = (list, d) => list.find(e => d >= Date.parse(e.start) && d <= Date.parse(e.end));
+  svg.append("rect").attr("x", m.l).attr("y", m.t).attr("width", W0 - m.l - m.r)
+    .attr("height", H - m.t - m.b).attr("fill", "transparent")
+    .on("mousemove", ev => {
+      const d0 = x.invert(d3.pointer(ev)[0]);
+      const i = Math.max(0, Math.min(rows.length - 1, Math.floor((d0 - rows[0].d) / DAY)));
+      const r = rows[i]; if (!r) return;
+      hair.attr("x1", x(r.d)).attr("x2", x(r.d)).style("display", null);
+      const em = inEv(j.events.mur, +r.d), eo = inEv(j.events.oisst, +r.d);
+      const cats = r.c.map((v, k) => v > 0 ? `<span style="color:${cols[k]}">&#9632;</span> ${CATS[k]} ${pct(v)}` : "")
+        .filter(Boolean).reverse().join("<br>");
+      showTip(`<b>${fmtD(r.d)}</b><br>In heatwave: <b>${pct(r.tot)}</b> of box` +
+        (cats ? `<br>${cats}` : "") +
+        `<br>Box-mean anomaly ${r.anom >= 0 ? "+" : ""}${r.anom.toFixed(2)} °C` +
+        `<br>MUR box-mean event: ${em ? `${em.start} → ${em.end} (${em.days} d)` : "no"}` +
+        `<br>OISST event: ${+r.d > Date.parse(j.oisst_last) ? "no data" : eo ? `${eo.start} → ${eo.end} (${eo.days} d)` : "no"}`,
+        ev.clientX, ev.clientY);
+    })
+    .on("mouseleave", () => { hair.style("display", "none"); hideTip(); });
+}
+
+async function getBin() {
+  const j = J(), k = state.win;
+  if (!j.bins[k]) j.bins[k] = new Uint8Array(await fetch(`data/mhw-${j.name}-${k}.bin`).then(r => r.arrayBuffer()));
+  return j.bins[k];
+}
+
+async function drawMap() {
+  const j = J(), w = W(), want = `${j.name}/${w.key}/${state.metric}`;
+  $("#map-title").textContent = `Per pixel, ${w.map_label}`;
+  $("#map-note").textContent = state.metric === "days"
+    ? "Heatwave days per pixel in the window. Grey is land."
+    : "Largest anomaly above the seasonal climatology reached during a heatwave. Grey is land.";
+  const bin = await getBin();
+  if (want !== `${J().name}/${W().key}/${state.metric}`) return;   // stale
+  const n = j.nx * j.ny, off = state.metric === "days" ? 0 : n;
+  // one scale per metric, shared across the region's windows
+  const vmax = state.metric === "days"
+    ? Math.ceil(d3.max(j.windows, x => x.days_max) / 50) * 50
+    : 6;
+  const ramp = d3.range(7).map(k => css(`--seq-${k}`));
+  const col = d3.scaleLinear().domain(d3.range(7).map(k => k / 6)).range(ramp)
+    .interpolate(d3.interpolateLab).clamp(true);
+  const lut = new Uint8ClampedArray(256 * 4);
+  const land = d3.rgb(css("--land"));
+  for (let v = 0; v < 256; v++) {
+    const val = state.metric === "days" ? v : v * 0.05;
+    const c = v === 255 ? land : d3.rgb(col(val / vmax));
+    lut.set([c.r, c.g, c.b, 255], v * 4);
+  }
+  const cv = $("#map"); cv.width = j.nx; cv.height = j.ny;
+  const midlat = (j.bbox.lat[0] + j.bbox.lat[1]) / 2;
+  cv.style.aspectRatio = `${j.nx * Math.cos(midlat * Math.PI / 180)} / ${j.ny}`;
+  const ctx = cv.getContext("2d"), im = ctx.createImageData(j.nx, j.ny);
+  for (let i = 0; i < n; i++) im.data.set(lut.subarray(bin[off + i] * 4, bin[off + i] * 4 + 4), i * 4);
+  ctx.putImageData(im, 0, 0);
+  cv.setAttribute("aria-label", `${j.title} map of ${state.metric === "days" ? "heatwave days" : "peak anomaly"} per pixel`);
+  $("#cb-ramp").style.background = `linear-gradient(to right, ${ramp.join(",")})`;
+  $("#cb-lo").textContent = "0";
+  $("#cb-hi").textContent = state.metric === "days" ? `${vmax} days` : `${vmax} °C+`;
+  cv.onmousemove = ev => {
+    const r = cv.getBoundingClientRect();
+    const ix = Math.floor((ev.clientX - r.left) / r.width * j.nx);
+    const iy = Math.floor((ev.clientY - r.top) / r.height * j.ny);
+    if (ix < 0 || iy < 0 || ix >= j.nx || iy >= j.ny) return hideTip();
+    const lon = (j.bbox.lon[0] + ix * j.res).toFixed(2), lat = (j.bbox.lat[1] - iy * j.res).toFixed(2);
+    const d = bin[iy * j.nx + ix], a = bin[n + iy * j.nx + ix];
+    showTip(`<b>${lon}°E, ${(-lat).toFixed(2)}°S</b><br>` + (d === 255 ? "land" :
+      `${d} heatwave days<br>peak anomaly ${a ? "+" + (a * 0.05).toFixed(2) + " °C" : "none"}`),
+      ev.clientX, ev.clientY);
+  };
+  cv.onmouseleave = hideTip;
+}
+
+function drawAnnual() {
+  const j = J(), a = j.annual;
+  const svg = d3.select("#annual"); svg.selectAll("*").remove();
+  const W0 = $(".wrap").clientWidth, H = 220, m = { t: 12, r: 10, b: 26, l: 40 };
+  svg.attr("width", W0).attr("height", H).attr("role", "img")
+     .attr("aria-label", "annual heatwave days, pixel mean versus box mean");
+  const x0 = d3.scaleBand().domain(a.years).range([m.l, W0 - m.r]).paddingInner(0.22);
+  const x1 = d3.scaleBand().domain([0, 1]).range([0, x0.bandwidth()]).padding(0.08);
+  const y = d3.scaleLinear().domain([0, d3.max([...a.pixel_mean, ...a.box])]).nice().range([H - m.b, m.t]);
+  const ax = g => { g.selectAll("path,line").attr("stroke", css("--grid"));
+    g.selectAll("text").attr("fill", css("--text-secondary")).attr("font-size", 11); };
+  svg.append("g").attr("transform", `translate(${m.l},0)`)
+    .call(d3.axisLeft(y).ticks(5).tickSize(-(W0 - m.l - m.r))).call(ax)
+    .call(g => g.select(".domain").remove()).call(g => g.selectAll(".tick line").attr("opacity", .7));
+  const cols = [css("--series-1"), css("--series-2")];
+  const lastYr = +a.partial_last.slice(0, 4);
+  const showEvery = W0 < 700 ? 4 : 2;
+  svg.append("g").attr("transform", `translate(0,${H - m.b})`)
+    .call(d3.axisBottom(x0).tickValues(a.years.filter((yr, i) => i % showEvery === 0 || yr === lastYr))
+      .tickSizeOuter(0)).call(ax);
+  a.years.forEach((yr, i) => {
+    [a.pixel_mean[i], a.box[i]].forEach((v, k) => {
+      const bw = x1.bandwidth(), hh = y(0) - y(v);
+      if (hh <= 0) return;
+      const r = Math.min(4, bw / 2, hh);
+      const xx = x0(yr) + x1(k), yy = y(v);
+      svg.append("path").attr("fill", cols[k]).attr("d",
+        `M${xx},${y(0)}V${yy + r}Q${xx},${yy} ${xx + r},${yy}H${xx + bw - r}Q${xx + bw},${yy} ${xx + bw},${yy + r}V${y(0)}Z`);
+    });
+    svg.append("rect").attr("x", x0(yr) - x0.step() * x0.paddingInner() / 2).attr("y", m.t)
+      .attr("width", x0.step()).attr("height", H - m.t - m.b).attr("fill", "transparent")
+      .on("mousemove", ev => showTip(`<b>${yr}${yr === lastYr ? ` (to ${a.partial_last})` : ""}${yr === 2002 ? " (from Jun)" : ""}</b>` +
+        `<br><span style="color:${cols[0]}">&#9632;</span> pixel mean ${a.pixel_mean[i].toFixed(0)} days` +
+        `<br><span style="color:${cols[1]}">&#9632;</span> box mean ${a.box[i]} days`, ev.clientX, ev.clientY))
+      .on("mouseleave", hideTip);
+  });
+  $("#an-leg").innerHTML =
+    `<span><span class="sw" style="background:${cols[0]}"></span>Pixel mean</span>` +
+    `<span><span class="sw" style="background:${cols[1]}"></span>Box mean</span>` +
+    `<span style="color:var(--text-muted)">2002 starts in June; ${lastYr} is partial</span>`;
+}
+
+function drawTable() {
+  const j = J(), w = W(), p0 = new Date(w.plot[0]), p1 = new Date(Date.parse(w.plot[1]) + DAY);
+  const row = (e, col, src) => `<tr><td><span class="dot" style="background:${col}"></span>${src}</td>
+    <td>${e.start}</td><td>${e.end}</td><td>${e.days}</td><td>${e.peak}</td>
+    <td>+${e.imax.toFixed(2)}</td><td>+${e.imean.toFixed(2)}</td></tr>`;
+  const pick = l => spans(l, p0, p1).map(s => s.ev);
+  const mur = pick(j.events.mur), oi = pick(j.events.oisst);
+  $("#evtable").innerHTML = (mur.length + oi.length) ? `<table>
+    <tr><th>Series</th><th>Start</th><th>End</th><th>Days</th><th>Peak</th><th>Max &deg;C</th><th>Mean &deg;C</th></tr>
+    ${mur.map(e => row(e, css("--series-2"), "MUR box mean")).join("")}
+    ${oi.map(e => row(e, css("--series-3"), "OISST classic")).join("")}</table>`
+    : `<p class="note">No box-mean events in this window.</p>`;
+}
+
+function drawCards() {
+  const j = J();
+  $("#baseline-card").innerHTML = `<p><b>Why two baselines.</b> MUR starts in
+    2002, so it cannot use the conventional 1982&ndash;2011 climatology, and
+    trend.sst never mixes products to fake one. Its own 2003&ndash;2025
+    baseline already contains the recent warm years, so the threshold is
+    higher and long events fragment: in the Tasman Sea, OISST on
+    1982&ndash;2011 sees 2015/16 as one 318-day event, while on 2003&ndash;2025
+    both products split it into 6&ndash;8. Read the MUR results as
+    <i>relative to recent climate</i>; the OISST strip is the classic reference.</p>
+    <p>OISST here is the mean of the ${j.oisst_cells} S2 cells (level 5) whose
+    centres fall in the box, from the same sums as the rest of the site.</p>`;
+  $("#pngs").innerHTML = j.windows.map(w =>
+    `<p><a href="img/mhw_${j.name}_${w.key}.png">${j.title} ${w.label}</a></p>`).join("");
+}
+</script>
+</body>
+</html>
