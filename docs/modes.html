@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trend.sst - modes</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f0efec;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
+    --series-1: #2a78d6; --grid: #e4e3de; --border: #d8d7d0;
+    --accent-warm: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #262624;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
+      --series-1: #3987e5; --grid: #32322f; --border: #3d3d39;
+      --accent-warm: #e05252;
+    }
+  }
+  html, body { margin: 0; }
+  .viz-root { background: var(--surface-1); color: var(--text-primary);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; padding: 20px 24px 48px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+
+  h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; padding-bottom: 8px; }
+  header { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tabs { display: flex; gap: 4px; align-items: flex-end; flex: 1; }
+  .tabs a { padding: 7px 14px; color: var(--text-secondary);
+    text-decoration: none; font-size: 13px; border: 1px solid transparent;
+    border-radius: 8px 8px 0 0; margin-bottom: -1px; white-space: nowrap; }
+  .tabs a:hover { color: var(--text-primary); }
+  .tabs a.on { background: var(--surface-1); border-color: var(--border);
+    border-bottom-color: var(--surface-1); color: var(--text-primary);
+    font-weight: 600; }
+  .tabs a.ext { margin-left: auto; align-self: center; margin-bottom: 7px;
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
+    font-size: 12px; color: var(--series-1); background: var(--surface-2); }
+  .tabs a.ext::after { content: " \2197"; }
+  .tabs a.ext:hover { border-color: var(--series-1); }
+  .tabs a.gh { align-self: center; margin-bottom: 7px; margin-left: 8px;
+    display: inline-flex; padding: 4px; color: var(--text-secondary);
+    border: none; }
+  .tabs a.gh:hover { color: var(--text-primary); }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 2px 0 24px; }
+
+
+  h2 { font-size: 16px; font-weight: 650; margin: 30px 0 8px; }
+  p { margin: 10px 0; max-width: 72ch; }
+  a { color: var(--series-1); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+  .modes { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 12px; }
+  .modes button { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
+    cursor: pointer; font-variant-numeric: tabular-nums; }
+  .modes button.on { border-color: var(--series-1); color: var(--text-primary); font-weight: 600; }
+  .panel { position: relative; }
+  canvas { display: block; width: 100%; }
+  #map { aspect-ratio: 2 / 1; background: var(--surface-2); border-radius: 8px; }
+  #pc { height: 200px; }
+  .legend { display: flex; align-items: center; gap: 8px; font-size: 12px;
+    color: var(--text-muted); margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+  .legend canvas { width: 180px; height: 10px; border-radius: 3px; }
+  .readout { font-size: 12.5px; color: var(--text-secondary); min-height: 1.6em;
+    font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .stat { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0; }
+  .card { background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 16px; margin: 16px 0; font-size: 14px; }
+  .card p { margin: 6px 0; }
+  .card td { padding: 3px 18px 3px 0; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 40px; }
+  @media (max-width: 600px) { .viz-root { padding: 14px 16px 40px; } #pc { height: 160px; } }
+
+  @media (max-width: 640px) { .tabs { flex-wrap: wrap; } .tabs a.ext { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+<header>
+  <h1>trend.sst</h1>
+  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html">Heatwaves</a><a href="method.html">Method</a><a href="modes.html" class="on">Modes</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+</header>
+
+<p class="sub">Empirical orthogonal functions (EOFs) of monthly sea surface
+temperature: the record's dominant patterns of variability, each with its
+time series.</p>
+
+<div class="modes" id="srcs" role="group" aria-label="source" hidden></div>
+<div class="modes" id="modes" role="group" aria-label="mode"></div>
+<p class="stat" id="stat"></p>
+
+<div class="panel">
+  <canvas id="map" aria-label="map of the selected mode's pattern"></canvas>
+  <div class="legend"><span id="lo"></span><canvas id="bar" width="180" height="10"></canvas><span id="hi"></span><span id="unit">mm per standard deviation of the time series</span></div>
+</div>
+
+<h2 id="pctitle">Time series</h2>
+<div class="panel">
+  <canvas id="pc" aria-label="principal component time series"></canvas>
+  <div class="readout" id="readout">&nbsp;</div>
+</div>
+
+<h2>What this is</h2>
+<p>Each cell's monthly mean comes straight from the published sums
+(summed <span class="mono">sumwx</span> over summed
+<span class="mono">sumw</span> for the cell and month), so nothing here is
+re-read from the source. From each cell's monthly series the mean, a
+linear trend and the mean seasonal cycle are removed. The singular value
+decomposition of the resulting month by cell matrix gives the modes, with
+cells equally weighted (S2 level-5 cells are roughly equal in area).</p>
+<p>A mode is a fixed spatial pattern, shown on the map, multiplied by its
+time series below. The map is in degrees C per standard deviation of the
+time series, so pattern times series is that mode's contribution to sea
+surface temperature. Mode 1 is signed so that it is positive where the Nino 3.4 box
+(5S-5N, 170W-120W) loads.</p>
+<p>The pattern and time series together are a compression of the record:
+each cell gets a vector of loadings, each month a vector of amplitudes.
+That is the classical form of what are now called embeddings, and the
+baseline any learned embedding of this record should be measured
+against.</p>
+
+<h2>Checks</h2>
+<div class="card" id="checks"><p>Loading...</p></div>
+
+<h2>Masked: inland water</h2>
+<p>Both products carry lakes. Unmasked, OISST's second mode was the Great
+Lakes, and GHRSST MUR, which covers lakes worldwide, gave its first two
+modes to the lakes of the Tibetan Plateau. The analysis therefore drops
+the Caspian, the Great Lakes and Ladoga/Onega from both, and uses only
+GHRSST cells that OISST also has. Each mode reports how much of its
+pattern sits in its top 5% of cells, and <span class="mono">eof.py</span>
+flags any above 70%: that is how inland water showed up.</p>
+
+<footer>trend.sst &middot; computed by <span class="mono">data-raw/eof.py</span>
+from the site's monthly export &middot;
+<a href="https://github.com/mdsumner/trend.sst">source</a></footer>
+</div></div>
+
+<script type="application/json" id="cfg">{"sources": [{"id": "oisst", "label": "OISST (1982-)"}, {"id": "ghrsst", "label": "GHRSST MUR (2003-)"}],
+ "mode1": "its pattern is the warming of the central and eastern equatorial Pacific during El Nino",
+ "oni": "Independent check (tools/check_oni.py, run 2026-11-05): with the time series smoothed to 3 months, OISST mode 1 correlates 0.96 with NOAA's Oceanic Nino Index (ERSST v5), peaking at lag 0. The same check on the sea level record (trend.sla) gives 0.94."}</script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const css = (v) => getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(v).trim();
+  const CFG = JSON.parse(document.getElementById('cfg').textContent);
+  let E, C, coast, sel = 0, src = CFG.sources[0].id;
+  const LON0 = 20;                      // map centred on the Pacific (200E)
+  const X = (lon) => ((lon - LON0) % 360 + 360) % 360;
+
+  function hex(c) { c = c.replace('#', ''); return [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16)); }
+  function ramp(v) {                    // v in [-1, 1]
+    const neg = hex(css('--series-1')), pos = hex(css('--accent-warm')), mid = hex(css('--surface-2'));
+    const a = Math.min(1, Math.abs(v)), end = v < 0 ? neg : pos;
+    const t = Math.pow(a, 0.8);
+    return 'rgb(' + mid.map((m, i) => Math.round(m + (end[i] - m) * t)).join(',') + ')';
+  }
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+    const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); return [g, r.width, r.height];
+  }
+  function scaleOf(p) {
+    const a = p.filter(v => v !== null).map(Math.abs).sort((x, y) => x - y);
+    const q = a[Math.floor(a.length * 0.98)] || 1;
+    const nice = [0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200];
+    return nice.find(n => n >= q) || q;
+  }
+
+  function drawMap() {
+    const [g, w, h] = fit($('map'));
+    const sx = w / 360, sy = h / 180, px = (x) => x * sx, py = (lat) => (90 - lat) * sy;
+    const pat = E.modes[sel].pattern, s = scaleOf(pat);
+    g.clearRect(0, 0, w, h);
+    C.cells.forEach((c, i) => {
+      const v = pat[i];
+      if (v === null || v === undefined) return;
+      let xs = c.ring.map(p => X(p[0]));
+      const x0 = xs[0];
+      xs = xs.map(x => x - x0 > 180 ? x - 360 : (x0 - x > 180 ? x + 360 : x));
+      g.fillStyle = ramp(v / s);
+      for (const off of [0, -360, 360]) {
+        const mn = Math.min(...xs) + off, mx = Math.max(...xs) + off;
+        if (mx < 0 || mn > 360) continue;
+        g.beginPath();
+        c.ring.forEach((p, k) => { const xx = px(xs[k] + off), yy = py(p[1]); k ? g.lineTo(xx, yy) : g.moveTo(xx, yy); });
+        g.closePath(); g.fill();
+      }
+    });
+    if (coast) {
+      g.strokeStyle = css('--text-secondary'); g.lineWidth = 0.7; g.globalAlpha = 0.8;
+      for (const line of coast.coordinates) {
+        g.beginPath(); let prev = null;
+        for (const p of line) {
+          const x = X(p[0]);
+          if (prev === null || Math.abs(x - prev) > 180) g.moveTo(px(x), py(p[1])); else g.lineTo(px(x), py(p[1]));
+          prev = x;
+        }
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
+    // Nino 3.4 box
+    g.strokeStyle = css('--text-primary'); g.lineWidth = 1; g.setLineDash([3, 3]);
+    g.strokeRect(px(X(-170)), py(5), px(50), py(-5) - py(5)); g.setLineDash([]);
+    $('unit').textContent = E.unit + ' per standard deviation of the time series';
+    $('lo').textContent = '-' + s; $('hi').textContent = '+' + s;
+    const bg = $('bar').getContext('2d');
+    for (let i = 0; i < 180; i++) { bg.fillStyle = ramp(i / 89.5 - 1); bg.fillRect(i, 0, 1, 10); }
+  }
+
+  let pcGeom = null;
+  function drawPC() {
+    const [g, w, h] = fit($('pc'));
+    const pc = E.modes[sel].pc, n = pc.length;
+    const L = 34, R = 8, T = 8, B = 22;
+    const lim = Math.max(3, Math.ceil(Math.max(...pc.map(Math.abs))));
+    const x = (i) => L + (w - L - R) * i / (n - 1), y = (v) => T + (h - T - B) * (lim - v) / (2 * lim);
+    pcGeom = { x, n, L, R, w };
+    g.clearRect(0, 0, w, h);
+    g.font = '11px system-ui, sans-serif'; g.fillStyle = css('--text-muted'); g.strokeStyle = css('--grid'); g.lineWidth = 1;
+    for (let v = -lim; v <= lim; v += lim > 4 ? 2 : 1) {
+      g.beginPath(); g.moveTo(L, y(v)); g.lineTo(w - R, y(v)); g.stroke();
+      g.textAlign = 'right'; g.fillText(v > 0 ? '+' + v : String(v), L - 6, y(v) + 4);
+    }
+    g.textAlign = 'center';
+    E.months.forEach((m, i) => {
+      if (m.endsWith('-01') && (+m.slice(0, 4)) % 5 === 0) {
+        g.beginPath(); g.moveTo(x(i), T); g.lineTo(x(i), h - B); g.stroke();
+        g.fillText(m.slice(0, 4), x(i), h - 6);
+      }
+    });
+    g.strokeStyle = css('--text-secondary'); g.beginPath(); g.moveTo(L, y(0)); g.lineTo(w - R, y(0)); g.stroke();
+    for (const [sgn, col] of [[1, css('--accent-warm')], [-1, css('--series-1')]]) {
+      g.fillStyle = col; g.globalAlpha = 0.35; g.beginPath(); g.moveTo(x(0), y(0));
+      pc.forEach((v, i) => g.lineTo(x(i), y(sgn * v > 0 ? v : 0))); g.lineTo(x(n - 1), y(0)); g.closePath(); g.fill();
+    }
+    g.globalAlpha = 1; g.strokeStyle = css('--text-primary'); g.lineWidth = 1.2; g.beginPath();
+    pc.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))); g.stroke();
+  }
+
+  function draw() {
+    const m = E.modes[sel];
+    document.querySelectorAll('#modes button').forEach((b, i) => b.classList.toggle('on', i === sel));
+    $('stat').textContent = 'Mode ' + m.mode + ': ' + (100 * m.variance).toFixed(1) +
+      '% of variance; correlation with the Nino 3.4 box anomaly ' + m.r_nino34_box.toFixed(2) + '.';
+    $('pctitle').textContent = 'Mode ' + m.mode + ' time series (standard units)';
+    drawMap(); drawPC();
+  }
+
+  $('pc').addEventListener('mousemove', (ev) => {
+    if (!pcGeom) return;
+    const r = ev.target.getBoundingClientRect(), fx = (ev.clientX - r.left - pcGeom.L) / (pcGeom.w - pcGeom.L - pcGeom.R);
+    const i = Math.max(0, Math.min(pcGeom.n - 1, Math.round(fx * (pcGeom.n - 1))));
+    $('readout').textContent = E.months[i] + ': ' + E.modes[sel].pc[i].toFixed(2) + ' sd';
+  });
+  $('pc').addEventListener('mouseleave', () => { $('readout').innerHTML = '&nbsp;'; });
+
+  function checks() {
+    const m1 = E.modes[0], yrs = {};
+    E.months.forEach((m, i) => { const y = m.slice(0, 4); (yrs[y] = yrs[y] || []).push(m1.pc[i]); });
+    const peak = (a, b) => { let best = null; E.months.forEach((m, i) => { if (m >= a && m <= b && (best === null || m1.pc[i] > m1.pc[best])) best = i; }); return best; };
+    const rows = [['1982/83 El Nino', '1982-06', '1983-06'], ['1997/98 El Nino', '1997-06', '1998-06'], ['2015/16 El Nino', '2015-06', '2016-06'], ['2023/24 El Nino', '2023-04', '2024-04'], ['2026 El Nino', '2026-01', '2026-12']]
+      .filter(([lab, a, b]) => a >= E.months[0] && a <= E.months[E.months.length - 1])
+      .map(([lab, a, b]) => { const i = peak(a, b); return '<tr><td>' + lab + '</td><td class="mono">' + E.months[i] + '</td><td class="mono">' + m1.pc[i].toFixed(2) + ' sd</td></tr>'; }).join('');
+    $('checks').innerHTML =
+      '<p>Mode 1 is ENSO: its time series correlates ' + m1.r_nino34_box.toFixed(2) +
+      ' with the Nino 3.4 box anomaly' + (CFG.mode1 ? ', and ' + CFG.mode1 : '') + '. Its peaks in each El Nino window:</p>' +
+      '<table style="border-collapse:collapse;font-size:13px">' + rows + '</table>' +
+      (CFG.oni ? '<p>' + CFG.oni + '</p>' : '') +
+      '<p>Masked: ' + (E.masked.filter(x => x.cells > 0).map(x => x.label + ' (' + x.cells + ' cells)').join(', ') || 'none') + '.</p>' +
+      '<p class="mono" style="font-size:12px;color:var(--text-muted)">' + E.cells_used + ' cells x ' + E.months.length + ' months, ' + E.months[0] + ' to ' + E.months[E.months.length - 1] + '; ' + E.method + '.</p>';
+  }
+
+  fetch('data/coast-110m.json').then(r => r.json()).catch(() => null).then(k => { coast = k; load(src); });
+  function load(id) {
+    src = id;
+    Promise.all([fetch('data/eof-' + id + '.json').then(r => r.json()), fetch('data/cells-' + id + '.json').then(r => r.json())])
+      .then(([e, c]) => {
+        E = e; C = c;
+        if (sel >= E.modes.length) sel = 0;
+        $('modes').innerHTML = E.modes.map((m, i) => '<button type="button">Mode ' + m.mode + ' <span style="color:var(--text-muted)">' + (100 * m.variance).toFixed(1) + '%</span></button>').join('');
+        document.querySelectorAll('#modes button').forEach((b, i) => b.addEventListener('click', () => { sel = i; draw(); }));
+        document.querySelectorAll('#srcs button').forEach(b => b.classList.toggle('on', b.dataset.id === id));
+        checks(); draw();
+      });
+  }
+  if (CFG.sources.length > 1) {
+    $('srcs').hidden = false;
+    $('srcs').innerHTML = CFG.sources.map(x => '<button type="button" data-id="' + x.id + '">' + x.label + '</button>').join('');
+    document.querySelectorAll('#srcs button').forEach(b => b.addEventListener('click', () => load(b.dataset.id)));
+  }
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => E && draw(), 150); });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => E && draw());
+})();
+</script>
+</body>
+</html>

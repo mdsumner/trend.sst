@@ -80,13 +80,15 @@
     font: 11.5px ui-monospace, Menlo, Consolas, monospace; }
   .d-arrow { stroke: var(--text-muted); stroke-width: 1.3; fill: none;
     marker-end: url(#arr); }
+
+  @media (max-width: 640px) { .tabs { flex-wrap: wrap; } .tabs a.ext { margin-left: 0; } }
 </style>
 </head>
 <body>
 <div class="viz-root"><div class="wrap">
 <header>
   <h1>trend.sst</h1>
-  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html">Heatwaves</a><a href="method.html" class="on">Method</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html">Heatwaves</a><a href="method.html" class="on">Method</a><a href="modes.html">Modes</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
 </header>
 <p class="sub">How daily satellite pixels become the statistically-ready
 cell sums everything on this site is computed from.</p>
@@ -113,6 +115,14 @@ stamp guards against ever applying a mapping to the wrong grid). A
 level-5 cell contains on the order of 70,000&ndash;100,000 MUR pixels
 (0.01&deg;) or about 100&ndash;170 OISST pixels (0.25&deg;); both
 sources land in the same cells, at their own native resolution.</p>
+
+<p>The same principle carries to polygons: if your workflow needs to
+rasterize regions against a native grid, see
+<a href="https://github.com/hypertidy/controlledburn">controlledburn</a>,
+which computes exact polygon coverage as sparse cell runs without
+materializing a mask, and its natural partner in Rust,
+<a href="https://github.com/hypertidy/rwarp">rwarp</a>, for the cases
+where data genuinely must move between grids.</p>
 
 <figure>
 <svg viewBox="0 0 860 240" role="img" aria-label="pixel grids mapping into one S2 cell">
@@ -152,7 +162,14 @@ sources land in the same cells, at their own native resolution.</p>
 <figcaption>The same cell (outline) seen by both grids. Pixels are
 assigned whole to the cell containing their centre; nothing is warped.
 The quadrilateral is schematic &mdash; real cell edges are great
-circles, drawn properly in the Explorer.</figcaption>
+circles, drawn properly in the Explorer: each cell ships as its four
+corners and the browser densifies each edge only as far as the current
+projection bends it (adaptive densification; see
+<a href="https://github.com/hypertidy/bigcurve">bigcurve</a> and its
+Rust counterpart
+<a href="https://github.com/hypertidy/bigcurve-rs">bigcurve-rs</a>, with
+<a href="https://github.com/hypertidy/rwarp">rwarp</a> applying the same
+idea to grid warping).</figcaption>
 </figure>
 
 <h2>Four sums, and why they are enough</h2>
@@ -367,6 +384,12 @@ reference event for the Tasman region.</p>
 for the detection of heatwaves and cold-spells. <i>Journal of Open
 Source Software</i> 3(27), 821 &mdash; the implementation reproduced
 exactly here.</p>
+
+<h2>Acknowledgments</h2>
+<p>This work uses resources of the Pawsey Supercomputing Research
+Centre, with funding from the Australian Government and the Government
+of Western Australia: the backfills run on Pawsey systems and the
+authoritative sums are served from Pawsey object storage.</p>
 
 <footer>trend.sst &middot; sums are per-date Parquet of
 (cell, n, sumw, sumwx, sumwx2) on S2 level-5 cells &middot;

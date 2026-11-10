@@ -49,6 +49,27 @@ message("status.json written")
 
 ## ---------------------------------------------------------------- series
 ## every region is a cell selection; add one by naming it here
+## polygon regions: a cell belongs if its CENTRE is inside (same rule as
+## the latitude bands). s2 polygons are spherical, so regions crossing
+## the antimeridian (Bering, Chukchi) need no special handling -- a
+## lon-min/lon-max filter would get them wrong. Vertices are lon/lat,
+## any winding (s2 takes the smaller of the two possible interiors).
+cells_in_poly <- function(lon, lat) {
+  poly <- s2::s2_make_polygon(lon, lat, oriented = FALSE)
+  inside <- s2::s2_intersects(poly, s2::s2_geog_point(reg$lon, reg$lat))
+  reg$cell[inside]
+}
+## Alaska seas, after the regional SST departure maps (OISST, 1991-2020
+## baseline) that motivated them; boundaries approximate at 290 km
+## cell grain -- the southern Bering follows the Aleutian arc
+alaska <- list(
+  goa = cells_in_poly(c(-160, -130, -130, -160), c(50, 50, 61, 61)),
+  bering = cells_in_poly(
+    c(162, 170, 180, -170, -163, -157, -157, 180, 170, 162),
+    c(56, 53, 51.5, 52.5, 54.5, 57, 66, 66, 62, 60)),
+  chukchi = cells_in_poly(c(180, -156, -156, 180), c(66, 66, 75, 75)),
+  beaufort = cells_in_poly(c(-156, -125, -125, -156), c(69.5, 69.5, 76, 76)))
+
 region_cells <- list(
   cr = cells_latband(reg, -60, 60),
   global = NULL,
@@ -58,13 +79,21 @@ region_cells <- list(
   so60 = cells_latband(reg, -90, -60),
   no60 = cells_latband(reg, 60, 90),
   nino34 = reg$cell[reg$lat > -5 & reg$lat < 5 &
-                    reg$lon > -170 & reg$lon < -120])
+                    reg$lon > -170 & reg$lon < -120],
+  goa = alaska$goa, bering = alaska$bering,
+  chukchi = alaska$chukchi, beaufort = alaska$beaufort,
+  alaska = unique(unlist(alaska)))
 region_labels <- list(
   cr = "60S-60N", global = "Global",
   nh = "N hemisphere", sh = "S hemisphere",
   tropics = "Tropics 23S-23N", so60 = "South of 60S",
   no60 = "North of 60N",
-  nino34 = "Nino 3.4")
+  nino34 = "Nino 3.4",
+  goa = "Gulf of Alaska", bering = "Bering Sea",
+  chukchi = "Chukchi Sea", beaufort = "Beaufort Sea",
+  alaska = "Alaska seas (all four)")
+## a region that selects nothing is a typo in its vertices, not data
+stopifnot(all(lengths(region_cells[names(region_cells) != "global"]) > 0))
 
 rnd <- function(x) round(x, 3)
 series <- lapply(paths, function(p) {

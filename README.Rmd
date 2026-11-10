@@ -112,6 +112,19 @@ OISST path takes minutes and exercises every code path GHRSST will use).
       input-starved analyses (needs a fifth statistic; schema additions
       are cheap while the record is one rerun away)
 
+## Modes (EOFs)
+
+`data-raw/eof.py` (numpy only, shared verbatim with trend.sla) computes
+empirical orthogonal functions of the monthly export for each source and
+writes `docs/data/eof-<source>.json` for `docs/modes.html`. Per cell the
+mean, a linear trend and the mean seasonal cycle are removed; inland
+water is masked (Caspian, Great Lakes, Ladoga/Onega), and GHRSST is
+restricted to cells OISST also has, because MUR covers lakes worldwide
+(unmasked, Tibetan Plateau lakes took its first two modes). Mode 1 is
+ENSO in both: r = 0.94 (OISST) and 0.95 (GHRSST) with the Nino 3.4 box
+anomaly. `tools/check_oni.py docs/data/eof-oisst.json` checks it against
+NOAA's Oceanic Nino Index. `export_site.sh` runs both after each export.
+
 ## Layout
 
 Git holds recipes; the bucket holds artifacts; scratch holds nothing
