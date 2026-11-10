@@ -369,7 +369,7 @@ function drawTs() {
   $("#ts-leg").innerHTML = CATS.map((c, k) =>
     `<span><span class="sw" style="background:${cols[k]}"></span>${c}</span>`).join("") +
     `<span><span class="sw" style="background:${css("--series-2")}"></span>MUR box-mean event</span>` +
-    `<span><span class="sw" style="background:${css("--series-3")}"></span>OISST event (classic baseline)</span>`;
+    `<span><span class="sw" style="background:${css("--series-3")}"></span>OISST event</span>`;
   // hover
   const hair = svg.append("line").attr("y1", m.t).attr("y2", H - m.b)
     .attr("stroke", css("--text-muted")).attr("stroke-dasharray", "3 3").style("display", "none");
@@ -503,15 +503,26 @@ function drawTable() {
     : `<p class="note">No box-mean events in this window.</p>`;
 }
 
+// per-region example of the baseline effect (box means; from
+// validate/mhw_event.R, plot window)
+const BASELINE_EG = {
+  tasman: `in the Tasman Sea, OISST on 1982&ndash;2011 sees 2015/16 as one
+    318-day event, while on 2003&ndash;2025 both products split it into
+    6&ndash;8.`,
+  wa: `off Western Australia, OISST on 1982&ndash;2011 sees 2010/11 as two
+    long events (108 days from October, 99 days from February), while on
+    2003&ndash;2025 OISST splits the same period into 6 and MUR into 5, and
+    the February event shortens to 60 days in OISST.`
+};
+
 function drawCards() {
   const j = J();
   $("#baseline-card").innerHTML = `<p><b>Why two baselines.</b> MUR starts in
     2002, so it cannot use the conventional 1982&ndash;2011 climatology, and
     trend.sst never mixes products to fake one. Its own 2003&ndash;2025
     baseline already contains the recent warm years, so the threshold is
-    higher and long events fragment: in the Tasman Sea, OISST on
-    1982&ndash;2011 sees 2015/16 as one 318-day event, while on 2003&ndash;2025
-    both products split it into 6&ndash;8. Read the MUR results as
+    higher and long events fragment: ${BASELINE_EG[j.name] || BASELINE_EG.tasman}
+    Read the MUR results as
     <i>relative to recent climate</i>; the OISST strip is the classic reference.</p>
     <p>OISST here is the mean of the ${j.oisst_cells} S2 cells (level 5) whose
     centres fall in the box, from the same sums as the rest of the site.</p>`;
