@@ -14,6 +14,9 @@
 #SCRON --partition=work
 #SCRON --nodes=1 --ntasks=1 --cpus-per-task=16 --mem=96G
 #SCRON --time=03:00:00
-#SCRON --chdir=/scratch/pawsey1362/mdsumner/trend.sst
+## code in $MYSOFTWARE/trend.sst (persistent), data + logs in $MYSCRATCH/trend.sst: the
+## clone's gitignored data paths are symlinks to scratch (see
+## AustralianAntarcticDivision/trend tools/move-to-software.sh)
+#SCRON --chdir=/software/projects/pawsey1362/mdsumner/trend.sst
 #SCRON --output=/scratch/pawsey1362/mdsumner/trend.sst/sst-daily-%j.out
 43 5 * * * bash -l data-raw/daily.sh
