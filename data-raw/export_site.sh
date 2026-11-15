@@ -39,6 +39,9 @@ for src in oisst ghrsst; do
   fi
 done
 
+## pull before pushing: commits made elsewhere (merges, site edits) would
+## otherwise make every unattended push a rejected non-fast-forward
 git add docs/data \
   && git commit -m "site data: regenerated from sums ($(date -u +%F))" \
+  && git pull -q --rebase --autostash origin main \
   && git push origin main
