@@ -4,6 +4,10 @@ output: github_document
 
 # trend.sst
 
+Part of the [trend family](https://australianantarcticdivision.github.io/trend/) of ocean climate records
+(sea surface temperature, sea level, chlorophyll-a, sea ice), all listed
+on that page.
+
 Daily sea surface temperature aggregated to a global S2 discrete grid
 (level 5, ~290 km cells) as *sufficient statistics*: per (cell, date) we
 store `n` (valid pixels), `sumw` (summed cos-latitude weights), `sumwx`,
