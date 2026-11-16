@@ -1,7 +1,8 @@
-## daily refresh of trend.sst on Setonix. Install with:  scrontab scrontab.txt
-## FIRST save what is installed:  scrontab -l > ~/scrontab-backup-$(date +%F).txt
-## (replaces your WHOLE scrontab -- trend.sla has its own entry, so merge
-## both in with  scrontab -e  instead). Times are Setonix local (AWST).
+## daily refresh of trend.sst on Setonix. Times are Setonix local (AWST).
+## A scrontab FRAGMENT: never `scrontab` this file directly (that replaces
+## the whole per-user crontab). Select it and install with scron from
+## AustralianAntarcticDivision/trend (tools/scron):
+##   scron enable NN-<repo> <this file>; scron diff; scron install
 ## A daily run touches ~11 GHRSST dates (10 provisional tail + new) and
 ## 1-2 OISST dates. Resources are a first guess: check MaxRSS with
 ##   sacct -j <jobid> --format=JobID,Elapsed,MaxRSS
