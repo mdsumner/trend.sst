@@ -610,6 +610,7 @@ function build(srcName, meta, monthly, aux) {
     })
     .on("mouseleave", hideTip)
     .on("click", (ev, f) => {
+      if (moved) return;   // the end of a drag, not a click
       sel.has(f.idx) ? sel.delete(f.idx) : sel.add(f.idx);
       selLabel = null; regionsel.value = ""; UI.regionKey = "";
       saveSel();
@@ -693,14 +694,19 @@ function build(srcName, meta, monthly, aux) {
 
   // drag: rotate the globe, spin/slide the longlat rectangle, or pan
   // the spilhaus plane; wheel zooms all
-  let drag = null;
+  // moved: the pointer travelled > 4 px since pointerdown, so the click
+  // the browser fires after pointerup ends a drag and selects nothing
+  let drag = null, moved = false;
   svg.on("pointerdown", ev => {
+       moved = false;
        drag = [ev.clientX, ev.clientY,
                view === "ortho" ? proj.rotate()
              : FLAT[view] ? [FLAT[view].p.rotate()[0], FLAT[view].p.translate()[1]]
              : { ...pan }]; })
      .on("pointermove", ev => {
        if (!drag) return;
+       if (!moved && Math.hypot(ev.clientX - drag[0], ev.clientY - drag[1]) > 4)
+         moved = true;
        if (view === "ortho") {
          const k = 90 / proj.scale();
          proj.rotate([drag[2][0] + (ev.clientX - drag[0]) * k,
