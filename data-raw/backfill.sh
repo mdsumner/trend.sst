@@ -42,13 +42,15 @@ $RUN Rscript data-raw/backfill.R
 #rclone sync sums/ pawsey1197:aad-derived/trend-sst/sums/
 #rclone sync mapping/ pawsey1197:aad-derived/trend-sst/mapping/
 
-rclone copy --checksum sums/ pawsey1197:aad-derived/trend-sst/sums/ \
+## --copy-links: the $MYSOFTWARE clone links its data files (manifest.json,
+## catalogs, registry) to scratch, and rclone skips symlinked files without it
+rclone copy --copy-links --checksum sums/ pawsey1197:aad-derived/trend-sst/sums/ \
   || echo "WARNING: sums copy FAILED" >&2
-rclone copy --checksum mapping/ pawsey1197:aad-derived/trend-sst/mapping/ \
+rclone copy --copy-links --checksum mapping/ pawsey1197:aad-derived/trend-sst/mapping/ \
   || echo "WARNING: mapping copy FAILED" >&2
 
 ## bucket-truth manifest for the Pages mechanics view: written by the
 ## machine that writes the bucket, after the sums push
 $RUN Rscript data-raw/write_manifest.R . \
-  && rclone copy manifest.json pawsey1197:aad-derived/trend-sst/ \
+  && rclone copy --copy-links manifest.json pawsey1197:aad-derived/trend-sst/ \
   || echo "WARNING: manifest FAILED" >&2
