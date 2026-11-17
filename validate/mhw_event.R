@@ -5,8 +5,8 @@
 ## 8:16101, over 147-155E 37-45S: 2015-09-09..2016-05-16, 251 d; the
 ## closest published box to ours is Kajtar et al. 2021, JSHESS 71:284-302,
 ## 147-157E 37-46S on 1983-2012: 2015-09-09..2016-07-22, 318 d, as our
-## OISST on 1982-2011); wa 2010/11 (Pearce & Feng 2013, J Mar Sys
-## 111-112:139-156).
+## OISST on 1982-2011, whose S2 cells reach 46S: see mhw_oliver2017.R);
+## wa 2010/11 (Pearce & Feng 2013, J Mar Sys 111-112:139-156).
 ##
 ## Climatology: MUR-only baseline 2003-01-01..2025-12-31 (23 whole years;
 ## MUR starts 2002-06, so the 30-year convention is not available and we
