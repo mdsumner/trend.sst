@@ -4,6 +4,11 @@
 // record settings come from records.js (status: fresh thresholds or a
 // fixed-release label, ghost source for the day-of-year backdrop,
 // default region, series units).
+// status.json is per STORE (what is held: tiles, coverage), series.json
+// per site SOURCE; they are usually the same keys, but a source can be
+// made of several stores (trend.ice: the CDR is one bipolar source from
+// a south and a north store). A store may carry its own "label". A
+// source lists only the regions it has.
 (function () {
 const SITE = window.TREND_SITE, REC = window.TREND_RECORDS[SITE.record];
 const ST = REC.status || {};
@@ -32,7 +37,11 @@ Promise.all([
 
 function build(status, series) {
   $("#gen").textContent = (status.generated || "").replace("T", " ");
-  const names = Object.keys(status.sources);
+  const names = Object.keys(status.sources);              // stores
+  const snames = Object.keys(series.sources);            // site sources
+  const slab = nm => status.sources[nm]?.label || lab(nm);
+  // does a source have the current region?
+  const has = nm => series.sources[nm]?.[state.region] != null;
   const today = new Date();
   const el = $("#content");
   el.innerHTML = "";
@@ -49,7 +58,7 @@ function build(status, series) {
              : behind <= f2 ? ["--status-warning", "Lagging"]
              : ["--status-critical", "Stale"];
     const t = document.createElement("div"); t.className = "tile";
-    t.innerHTML = `<div class="name">${lab(nm)}</div>
+    t.innerHTML = `<div class="name">${slab(nm)}</div>
       <div class="big">${s.last}</div>
       <div class="meta">${s.n.toLocaleString()} dates from ${s.first}
         &middot; ${s.gaps.length} gap${s.gaps.length === 1 ? "" : "s"}
@@ -90,13 +99,13 @@ function build(status, series) {
   el.appendChild(sec2);
 
   const state = { view: "time", region: ST.region || "cr",
-                  src: names.length > 1 ? "both" : names[0] };
+                  src: snames.length > 1 ? "both" : snames[0] };
   const srcsel = $("#srcsel");
-  if (names.length > 1) {
+  if (snames.length > 1) {
     const o = document.createElement("option");
     o.value = "both"; o.textContent = "Both"; srcsel.appendChild(o);
   }
-  for (const nm of names) {
+  for (const nm of snames) {
     const o = document.createElement("option");
     o.value = nm; o.textContent = lab(nm); srcsel.appendChild(o);
   }
@@ -142,7 +151,7 @@ function build(status, series) {
   }
 
   function drawTime(svg, w, h, m, leg) {
-    const packs = names.map(nm => {
+    const packs = snames.filter(has).map(nm => {
       const s = series.sources[nm];
       return { nm, col: css(col(nm)),
                pts: s.dates.map((d, i) => ({ d: new Date(d), v: s[state.region][i] }))
@@ -195,9 +204,10 @@ function build(status, series) {
     // "Both": the longer record supplies the gray climatological
     // backdrop; the current year is drawn once per source in its color,
     // so the products are compared on the same day axis and context.
-    const srcs = state.src === "both" ? names : [state.src];
+    const srcs = (state.src === "both" ? snames : [state.src]).filter(has);
+    if (!srcs.length) return;
     const ghostSrc = srcs.includes(ST.ghost) ? ST.ghost
-      : srcs.reduce((a, b) => status.sources[b].first < status.sources[a].first ? b : a);
+      : srcs.reduce((a, b) => series.sources[b].dates[0] < series.sources[a].dates[0] ? b : a);
     const toDoy = nm => {
       const s = series.sources[nm];
       return d3.group(s.dates.map((d, i) => ({ d, v: s[state.region][i] }))
@@ -302,7 +312,7 @@ function build(status, series) {
       const yy = i * (rowH + gap);
       cx.fillStyle = css("--text-secondary");
       cx.font = "12px system-ui"; cx.textBaseline = "middle";
-      cx.fillText(lab(nm), 0, yy + rowH / 2);
+      cx.fillText(slab(nm), 0, yy + rowH / 2);
       cx.globalAlpha = .55; cx.fillStyle = css(col(nm));
       cx.fillRect(x(new Date(s.first)), yy,
                   x(new Date(s.last)) - x(new Date(s.first)), rowH);
@@ -329,7 +339,7 @@ function build(status, series) {
         : d > s.last ? "not yet"
         : d >= fmtD(new Date(new Date(s.last) - s.provisional_days * 864e5))
           ? "provisional" : "held";
-      showTip(`<b>${lab(nm)}</b> ${d}<br>${state}`, ev.clientX, ev.clientY);
+      showTip(`<b>${slab(nm)}</b> ${d}<br>${state}`, ev.clientX, ev.clientY);
     };
     cv.onmouseleave = hideTip;
   }

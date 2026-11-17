@@ -59,7 +59,7 @@ async function main() {
 
   for (const nm of srcs) {
     const b = bucket?.sums?.[nm], s = site.sources?.[nm];
-    html += `<h2>${nm}</h2><table>
+    html += `<h2>${nm}${s?.label ? ` <span class="sub">${s.label}</span>` : ""}</h2><table>
       <tr><th>stage</th><th>dates</th><th>first</th><th>last</th>
           <th>gaps</th><th>size</th><th>as of</th></tr>
       <tr><td>bucket sums</td>
