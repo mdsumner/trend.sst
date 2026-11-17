@@ -165,9 +165,14 @@ for (src in names(paths)) {
   percell <- arrow::open_dataset(p) |>
     filter(date >= d0, date <= d1) |>
     group_by(cell) |>
-    summarise(n = sum(n), sumw = sum(sumw), sumwx = sum(sumwx)) |>
+    summarise(nd = n(), n = sum(n), sumw = sum(sumw), sumwx = sum(sumwx)) |>
     collect() |>
-    mutate(mean = sumwx / sumw, w = sumw / n)   # w: mean per-day cell weight
+    ## w: the cell's weight in a union of cells, its mean sumw per day
+    ## with data (the ocean area it covers, in pixel-weight units), so
+    ## sum(w * mean) / sum(w) over a selection matches the sums. Not
+    ## sumw / n: that is the mean weight of one pixel, cos(lat), which
+    ## ignores land in the cell and under-weights high latitudes.
+    mutate(mean = sumwx / sumw, w = sumw / nd)
 
   ann <- arrow::open_dataset(p) |>
     filter(date >= d0, date <= d1) |>

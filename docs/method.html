@@ -4,72 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trend.sst - method</title>
+<link rel="stylesheet" href="kit/trend.css">
 <style>
-  .viz-root {
-    color-scheme: light;
-    --surface-1: #fcfcfb; --surface-2: #f0efec;
-    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
-    --series-1: #2a78d6; --grid: #e4e3de; --border: #d8d7d0;
-    --accent-warm: #e34948;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:where(:not([data-theme="light"])) .viz-root {
-      color-scheme: dark;
-      --surface-1: #1a1a19; --surface-2: #262624;
-      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
-      --series-1: #3987e5; --grid: #32322f; --border: #3d3d39;
-      --accent-warm: #e05252;
-    }
-  }
-  html, body { margin: 0; }
-  .viz-root { background: var(--surface-1); color: var(--text-primary);
-    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
-    min-height: 100vh; padding: 20px 24px 48px; }
-  .wrap { max-width: 860px; margin: 0 auto; }
-
-  h1 { font-size: 20px; margin: 0 0 2px; font-weight: 650; padding-bottom: 8px; }
-  header { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
-    border-bottom: 1px solid var(--border); margin-bottom: 14px; }
-  .tabs { display: flex; gap: 4px; align-items: flex-end; flex: 1; }
-  .tabs a { padding: 7px 14px; color: var(--text-secondary);
-    text-decoration: none; font-size: 13px; border: 1px solid transparent;
-    border-radius: 8px 8px 0 0; margin-bottom: -1px; white-space: nowrap; }
-  .tabs a:hover { color: var(--text-primary); }
-  .tabs a.on { background: var(--surface-1); border-color: var(--border);
-    border-bottom-color: var(--surface-1); color: var(--text-primary);
-    font-weight: 600; }
-  .tabs a.ext { margin-left: auto; align-self: center; margin-bottom: 7px;
-    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
-    font-size: 12px; color: var(--series-1); background: var(--surface-2); }
-  .tabs a.ext::after { content: " \2197"; }
-  .tabs a.ext:hover { border-color: var(--series-1); }
-  .tabs a.gh { align-self: center; margin-bottom: 7px; margin-left: 8px;
-    display: inline-flex; padding: 4px; color: var(--text-secondary);
-    border: none; }
-  .tabs a.gh:hover { color: var(--text-primary); }
-  .sub { color: var(--text-secondary); font-size: 13px; margin: 2px 0 24px; }
-
-  h2 { font-size: 16px; font-weight: 650; margin: 34px 0 8px; }
-  p { margin: 10px 0; max-width: 72ch; }
-  a { color: var(--series-1); }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 13px; }
-  figure { margin: 18px 0; }
-  figure svg { width: 100%; height: auto; display: block; }
-  figcaption { color: var(--text-muted); font-size: 12.5px; margin-top: 6px;
-    max-width: 72ch; }
-  .card { background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px 18px; margin: 16px 0; }
-  .card .mono { font-size: 13.5px; }
-  .card p { margin: 6px 0; }
-  table { border-collapse: collapse; font-size: 13px; margin: 12px 0;
-    font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 5px 16px 5px 0;
-    border-bottom: 1px solid var(--grid); }
-  th { color: var(--text-secondary); font-weight: 600; font-size: 12px;
-    letter-spacing: .03em; text-transform: uppercase; }
-  footer { color: var(--text-muted); font-size: 12px; margin-top: 40px; }
-
   /* diagram strokes/fills via theme vars */
   .d-grid { stroke: var(--grid); stroke-width: 1; }
   .d-cell { stroke: var(--accent-warm); stroke-width: 2; fill: none; }
@@ -80,17 +16,13 @@
     font: 11.5px ui-monospace, Menlo, Consolas, monospace; }
   .d-arrow { stroke: var(--text-muted); stroke-width: 1.3; fill: none;
     marker-end: url(#arr); }
-
-  @media (max-width: 640px) { .tabs { flex-wrap: wrap; } .tabs a.ext { margin-left: 0; } }
-  .tabs a.ext + a.ext { margin-left: 8px; }
 </style>
+<script src="kit/records.js"></script>
+<script src="site.js"></script>
 </head>
 <body>
-<div class="viz-root"><div class="wrap">
-<header>
-  <h1>trend.sst</h1>
-  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html">Heatwaves</a><a href="method.html" class="on">Method</a><a href="modes.html">Modes</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/trend/" title="all the trend.* records: sea surface temperature, sea level, chlorophyll, sea ice">trend family</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
-</header>
+<div class="viz-root prose"><div class="wrap">
+<header class="trend"></header><script src="kit/shell.js"></script>
 <p class="sub">How daily satellite pixels become the statistically-ready
 cell sums everything on this site is computed from.</p>
 
@@ -261,7 +193,7 @@ the scheme in R.</p>
 <p>Each tier is derived from the one above and can be rebuilt from it;
 nothing on this site is hand-maintained. Anything you see here can be
 reproduced against the sums directly &mdash; select cells in the
-<a href="map.html">Explorer</a> and use <i>Get the data</i> for ready
+<a href="index.html">Explorer</a> and use <i>Get the data</i> for ready
 R / SQL / Python snippets, including the bulk-sync route for intensive
 work. The <a href="mechanics.html">Mechanics</a> page watches the gap
 between the tiers (what the bucket holds vs what this site was baked

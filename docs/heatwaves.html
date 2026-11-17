@@ -5,105 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trend.sst - marine heatwaves</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<link rel="stylesheet" href="kit/trend.css">
 <style>
+  /* heatwaves: tokens and components this page alone uses */
   .viz-root {
-    color-scheme: light;
-    --surface-1: #fcfcfb; --surface-2: #f0efec;
-    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a897f;
-    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
-    --grid: #e4e3de; --border: #d8d7d0; --baseline: #c3c2b7; --land: #e1e0d9;
+    --baseline: #c3c2b7; --land: #e1e0d9;
     /* category I-IV: ordinal blue, 250 -> 700 (lightest clears 2:1) */
     --cat-1: #86b6ef; --cat-2: #3987e5; --cat-3: #1c5cab; --cat-4: #0d366b;
     /* sequential map ramp, near-zero recedes toward the surface */
     --seq-0: #cde2fb; --seq-1: #9ec5f4; --seq-2: #6da7ec; --seq-3: #3987e5;
     --seq-4: #256abf; --seq-5: #184f95; --seq-6: #0d366b;
   }
-  @media (max-width: 640px) { .tabs { flex-wrap: wrap; } .tabs a.ext { margin-left: 0; } }
-  .tabs a.ext + a.ext { margin-left: 8px; }
-</style>
-<style>
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) .viz-root {
-      color-scheme: dark;
-      --surface-1: #1a1a19; --surface-2: #262624;
-      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8a897f;
-      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
-      --grid: #32322f; --border: #3d3d39; --baseline: #383835; --land: #2c2c2a;
+      --baseline: #383835; --land: #2c2c2a;
       /* on dark, magnitude steps toward light; darkest kept >= step 600 */
       --cat-1: #184f95; --cat-2: #256abf; --cat-3: #5598e7; --cat-4: #9ec5f4;
       --seq-0: #104281; --seq-1: #184f95; --seq-2: #256abf; --seq-3: #3987e5;
       --seq-4: #6da7ec; --seq-5: #9ec5f4; --seq-6: #cde2fb;
     }
   }
-  html, body { margin: 0; }
-  .viz-root {
-    background: var(--surface-1); color: var(--text-primary);
-    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
-    min-height: 100vh; padding: 20px 24px 48px;
-  }
-  .wrap { max-width: 1100px; margin: 0 auto; }
-  h1 { font-size: 20px; margin: 0; font-weight: 650; padding-bottom: 8px; }
-  header { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
-    border-bottom: 1px solid var(--border); margin-bottom: 14px; }
-  .tabs { display: flex; gap: 4px; align-items: flex-end; flex: 1; }
-  .tabs a { padding: 7px 14px; color: var(--text-secondary);
-    text-decoration: none; font-size: 13px; border: 1px solid transparent;
-    border-radius: 8px 8px 0 0; margin-bottom: -1px; white-space: nowrap; }
-  .tabs a:hover { color: var(--text-primary); }
-  .tabs a.on { background: var(--surface-1); border-color: var(--border);
-    border-bottom-color: var(--surface-1); color: var(--text-primary);
-    font-weight: 600; }
-  .tabs a.ext { margin-left: auto; align-self: center; margin-bottom: 7px;
-    border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
-    font-size: 12px; color: var(--series-1); background: var(--surface-2); }
-  .tabs a.ext::after { content: " \2197"; }
-  .tabs a.ext:hover { border-color: var(--series-1); }
-  .tabs a.gh { align-self: center; margin-bottom: 7px; margin-left: 8px;
-    display: inline-flex; padding: 4px; color: var(--text-secondary);
-    border: none; }
-  .tabs a.gh:hover { color: var(--text-primary); }
-  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 14px; max-width: 80ch; }
-  a { color: var(--series-1); }
-  .controls { display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
-              margin: 8px 0 14px; font-size: 13px; color: var(--text-secondary); }
-  .controls label { display: inline-flex; gap: 6px; align-items: center; }
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
-         overflow: hidden; }
-  .seg button { border: 0; background: transparent; color: var(--text-secondary);
-                padding: 5px 12px; font: inherit; cursor: pointer; }
-  .seg button.on { background: var(--surface-2); color: var(--text-primary);
-                   font-weight: 600; }
-  select { font: inherit; color: var(--text-primary); background: var(--surface-2);
-           border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-           gap: 12px; margin-bottom: 20px; }
-  .tile { background: var(--surface-2); border: 1px solid var(--border);
-          border-radius: 10px; padding: 12px 16px; }
-  .tile .name { font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
-                color: var(--text-secondary); }
-  .tile .big { font-size: 26px; font-weight: 650; margin: 2px 0; }
-  .tile .meta { color: var(--text-secondary); font-size: 12.5px; }
+  .sub { margin: 0 0 14px; max-width: 80ch; }
+  .controls { margin: 8px 0 14px; }
+  .controls label { gap: 6px; cursor: auto; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 20px; }
+  .tile { padding: 12px 16px; }
+  .tile .big { margin: 2px 0; }
   .grid2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
            gap: 28px; align-items: start; }
   @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
   section { margin: 22px 0; }
-  h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
-  .note { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 10px; max-width: 80ch; }
-  svg, canvas { display: block; }
-  .legend { display: flex; gap: 14px; align-items: center; font-size: 12.5px;
-            color: var(--text-secondary); margin-top: 6px; flex-wrap: wrap; }
-  .legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block;
-                margin-right: 5px; vertical-align: -2px; }
+  .note { max-width: 80ch; }
+  .legend { gap: 14px; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
   .mapbox { position: relative; }
   #map { width: 100%; image-rendering: auto; border-radius: 4px; cursor: crosshair; }
   .cbar { display: flex; align-items: center; gap: 8px; margin-top: 8px;
           font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .cbar .ramp { flex: 1; height: 10px; border-radius: 3px; }
-  .tooltip { position: fixed; pointer-events: none; background: var(--surface-2);
-             border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px;
-             font-size: 12.5px; color: var(--text-primary); display: none;
-             box-shadow: 0 2px 10px rgba(0,0,0,.12); z-index: 5;
-             font-variant-numeric: tabular-nums; }
   table { border-collapse: collapse; font-size: 13px; margin: 6px 0 0;
           font-variant-numeric: tabular-nums; }
   th, td { text-align: left; padding: 5px 18px 5px 0; border-bottom: 1px solid var(--grid); }
@@ -112,21 +51,17 @@
   td .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block;
             margin-right: 6px; }
   details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
-  .err { background: var(--surface-2); border: 1px solid var(--border);
-         border-radius: 10px; padding: 16px; color: var(--text-secondary); }
   .card { background: var(--surface-2); border: 1px solid var(--border);
           border-radius: 10px; padding: 12px 16px; font-size: 13px;
           color: var(--text-secondary); max-width: 80ch; }
   .card p { margin: 6px 0; }
-  footer { color: var(--text-muted); font-size: 12px; margin-top: 34px; }
 </style>
+<script src="kit/records.js"></script>
+<script src="site.js"></script>
 </head>
 <body>
-<div class="viz-root"><div class="wrap">
-<header>
-  <h1>trend.sst</h1>
-  <nav class="tabs"><a href="index.html">Status</a><a href="map.html">Explorer</a><a href="heatwaves.html" class="on">Heatwaves</a><a href="method.html">Method</a><a href="modes.html">Modes</a><a href="mechanics.html">Mechanics</a><a class="ext" href="https://australianantarcticdivision.github.io/trend/" title="all the trend.* records: sea surface temperature, sea level, chlorophyll, sea ice">trend family</a><a class="ext" href="https://australianantarcticdivision.github.io/ghrsst-cogger/" title="the upstream COG mirror, a separate site">upstream: COG pipeline</a><a class="gh" href="https://github.com/mdsumner/trend.sst" title="source repository" aria-label="GitHub repository"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
-</header>
+<div class="viz-root app"><div class="wrap">
+<header class="trend"></header><script src="kit/shell.js"></script>
 <p class="sub">Marine heatwaves (Hobday et al. 2016) computed per pixel on
 GHRSST MUR at its native 0.01&deg;, for regional deep dives. A pixel is in a
 heatwave when its SST stays above the 90th percentile of its own seasonal

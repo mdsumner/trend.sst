@@ -1,0 +1,15 @@
+/* trend kit: mechanics page (kit/mechanics.js), .ledger layout */
+.ledger { line-height: 1.5; }
+.ledger .sub { margin: 2px 0 20px; }
+.ledger h2 { margin: 26px 0 6px; }
+.ledger table { border-collapse: collapse; width: 100%; font-size: 13px;
+  font-variant-numeric: tabular-nums; }
+.ledger th, .ledger td { text-align: left; padding: 6px 12px 6px 0; vertical-align: top;
+  border-bottom: 1px solid var(--grid); }
+.ledger th { color: var(--text-secondary); font-weight: 600; font-size: 12px;
+  letter-spacing: .03em; text-transform: uppercase; }
+.ledger td.mono, .ledger .mono { font-size: 12.5px; }
+.ledger .chip { margin-top: 0; }
+.ledger .sec { color: var(--text-secondary); }
+.ledger .err { padding: 12px 14px; font-size: 13px; margin: 8px 0; }
+.ledger footer { margin-top: 36px; }

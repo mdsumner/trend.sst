@@ -1,0 +1,17 @@
+/* trend kit: cell explorer (kit/explorer.js), scoped to #app */
+.explorer .sub { margin: 0 0 14px; }
+#app .controls { margin: 0 0 10px; }
+#app select, #app button.btn { padding: 4px 9px; }
+#app .cols { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+#globe { touch-action: none; cursor: grab; }
+#globe:active { cursor: grabbing; }
+#app .panel { flex: 1 1 420px; min-width: 340px; max-width: 760px; }
+#app .panel h2 { font-size: 15px; margin: 2px 0 2px; font-weight: 650; }
+#app .note { margin: 0 0 8px; }
+#app .legend { font-size: 12px; gap: 8px; margin-top: 8px; }
+#app .legend #vhint { margin-left: auto; }
+#app .seg button { padding: 4px 11px; }
+pre#codebox { background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; margin: 0;
+  font: 11.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  overflow: auto; max-height: 280px; }
