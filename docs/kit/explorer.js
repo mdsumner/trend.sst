@@ -7,6 +7,9 @@
 //   data/cells-<id>.json   { months, regions, cells: [{ id, ring, mean,
 //                            trend, anom, w, lon, lat, sring? }] }
 //   data/monthly-<id>.bin  Float32 cells x months, cell-major
+//   data/<weights>         optional, named by the cells JSON "weights":
+//                          Float32 cells x months of cell weights, used in
+//                          place of the static w where coverage varies
 //   data/coast-110m.json   coastline mesh (self-hosted, see updateCoast)
 //
 // explorer config:
@@ -71,10 +74,23 @@ const UI = { metric: "trend", view: XC.view || "world", panelView: "time",
 function fetchSource(d) {
   if (DATA[d.key]) return Promise.resolve(DATA[d.key]);
   const f = `${d.base}cells-${d.id}.json`, b = `${d.base}monthly-${d.id}.bin`;
-  return Promise.all([
-    fetch(f).then(r => r.ok ? r.json() : Promise.reject(f)),
-    fetch(b).then(r => r.ok ? r.arrayBuffer() : Promise.reject(b))
-  ]).then(([meta, buf]) => (DATA[d.key] = { meta, monthly: new Float32Array(buf) }));
+  const bin = u => fetch(u).then(r => r.ok ? r.arrayBuffer() : Promise.reject(u));
+  const meta = fetch(f).then(r => r.ok ? r.json() : Promise.reject(f));
+  // monthly weights, when the export names a file (a bare name beside
+  // the cells JSON); its fetch starts as soon as the JSON is in, and
+  // without it the series falls back to the static w
+  const wts = meta.then(m => /^[\w.-]+\.bin$/.test(m.weights || "")
+    ? bin(d.base + m.weights).catch(() => (console.warn(`${m.weights} unavailable: using w`), null))
+    : null);
+  return Promise.all([meta, bin(b), wts]).then(([meta, buf, wbuf]) => {
+    const monthly = new Float32Array(buf);
+    let wm = wbuf ? new Float32Array(wbuf) : null;
+    if (wm && wm.length !== monthly.length) {
+      console.warn(`${meta.weights}: ${wm.length} values for ${monthly.length}; using w`);
+      wm = null;
+    }
+    return (DATA[d.key] = { meta, monthly, wm });
+  });
 }
 const fail = e => $("#app").innerHTML =
   `<div class="err">Could not load ${e}. ${SITE.dataHint ||
@@ -88,7 +104,7 @@ function loadSource(key) {
       .then(([a, b]) => build(d, diffMeta(a.meta, b.meta), null, { a, b, da, db }))
       .catch(fail);
   } else {
-    fetchSource(d).then(x => build(d, x.meta, x.monthly, null)).catch(fail);
+    fetchSource(d).then(x => build(d, x.meta, x.monthly, null, x.wm)).catch(fail);
   }
 }
 // shared cells only; every metric becomes a - b
@@ -119,7 +135,7 @@ function diffMeta(ma, mb) {
 }
 loadSource((XC.sources || [])[0] || Object.keys(RECS[HOME].sources)[0]);
 
-function build(D, meta, monthly, aux) {
+function build(D, meta, monthly, aux, wm) {
   const MET = D.metrics, REC = D.rec, isCombo = !!D.combo;
   if (!(UI.metric in MET)) UI.metric = Object.keys(MET)[0];
   const cells = meta.cells, nm = meta.months.length;
@@ -790,7 +806,7 @@ function build(D, meta, monthly, aux) {
     restyle(); drawSeries();
   });
   window._mapRedraw = () => { restyle(); drawSeries(); };
-  window._mapRebuild = () => build(D, meta, monthly, aux);
+  window._mapRebuild = () => build(D, meta, monthly, aux, wm);
   if (!window._mapMM) {
     window._mapMM = true;
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change",
@@ -821,7 +837,7 @@ function build(D, meta, monthly, aux) {
         let sw = 0, swx = 0;
         for (const i of idx) {
           const v = getV(i, m);
-          if (isFinite(v)) { const wi = getW(i); sw += wi; swx += wi * v; }
+          if (isFinite(v)) { const wi = getW(i, m); sw += wi; swx += wi * v; }
         }
         if (sw > 0) pts.push({ d: new Date(months[m] + "-15"),
                                v: tot ? swx * total.scale : swx / sw });
@@ -836,15 +852,15 @@ function build(D, meta, monthly, aux) {
         { label: sa.label, col: css(sa.col || "--series-2"),
           pts: mkpts(nA, A.meta.months,
                      (i, m) => A.monthly[cells[i].ia * nA + m],
-                     i => cells[i].wa) },
+                     A.wm ? (i, m) => A.wm[cells[i].ia * nA + m] : i => cells[i].wa) },
         { label: sb.label, col: css(sb.col || "--series-1"),
           pts: mkpts(nB, B.meta.months,
                      (i, m) => B.monthly[cells[i].ib * nB + m],
-                     i => cells[i].wb) }];
+                     B.wm ? (i, m) => B.wm[cells[i].ib * nB + m] : i => cells[i].wb) }];
     } else {
       series = [{ label: null, col: css("--series-1"),
         pts: mkpts(nm, meta.months, (i, m) => monthly[i * nm + m],
-                   i => cells[i].w) }];
+                   wm ? (i, m) => wm[i * nm + m] : i => cells[i].w) }];
     }
     series = series.filter(s => s.pts.length);
     if (!series.length) return;
