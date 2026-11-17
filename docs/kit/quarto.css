@@ -1,0 +1,31 @@
+/* trend kit: Quarto pages in the family look (trend.ice). Render with
+     format: html: { theme: none, minimal: true, css: [kit/trend.css, kit/quarto.css] }
+   and wrap the body with the kit header (include-before-body opens
+   <div class="wrap"> + header + shell.js, include-after-body closes it);
+   kit/shell.js then marks <body> as .viz-root.prose.quarto. Minimal mode
+   has no Bootstrap: layout panels, figures and callouts land here. */
+body.quarto { margin: 0; }
+.quarto #title-block-header { margin: 0 0 6px; }
+.quarto #title-block-header h1.title { font-size: 18px; font-weight: 650;
+  margin: 2px 0 2px; padding: 0; }
+.quarto #title-block-header .subtitle { color: var(--text-secondary);
+  font-size: 13px; margin: 0 0 18px; }
+.quarto .quarto-layout-panel { margin: 16px 0; }
+.quarto .quarto-layout-row { display: flex; gap: 14px 18px; }
+.quarto .quarto-layout-cell { min-width: 0; }
+@media (max-width: 700px) {
+  .quarto .quarto-layout-row { flex-direction: column; }
+}
+.quarto figure { margin: 16px 0; }
+.quarto .quarto-layout-cell figure { margin: 0; }
+.quarto figure p { margin: 0; }
+.quarto figure img { width: 100%; height: auto; display: block; border-radius: 6px; }
+/* minimal mode renders a callout as a titled blockquote */
+.quarto blockquote { background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 16px; margin: 18px 0; max-width: 72ch;
+  color: var(--text-secondary); font-size: 14px; }
+.quarto blockquote p { margin: 6px 0; }
+.quarto blockquote p:first-child strong { color: var(--text-primary); }
+.quarto ul, .quarto ol { padding-left: 22px; }
+.quarto li { margin: 4px 0; }
+.quarto sup { line-height: 0; }

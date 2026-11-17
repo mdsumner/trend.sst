@@ -1,0 +1,21 @@
+/* trend kit: modes page (kit/modes.js); a prose page with a map */
+.prose h2 { margin-top: 30px; }
+.modes { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 12px; }
+.modes button { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary);
+  cursor: pointer; font-variant-numeric: tabular-nums; }
+.modes button.on { border-color: var(--series-1); color: var(--text-primary); font-weight: 600; }
+.panel { position: relative; }
+.panel canvas { display: block; width: 100%; }
+#map { aspect-ratio: 2 / 1; background: var(--surface-2); border-radius: 8px; }
+#pc { height: 200px; }
+.panel .legend { display: flex; align-items: center; gap: 8px; font-size: 12px;
+  color: var(--text-muted); margin: 6px 0 0; }
+.panel .legend canvas { width: 180px; height: 10px; border-radius: 3px; }
+.readout { font-size: 12.5px; color: var(--text-secondary); min-height: 1.6em;
+  font-variant-numeric: tabular-nums; margin-top: 4px; }
+.stat { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0; }
+.prose .card { padding: 12px 16px; font-size: 14px; }
+.prose .card td { padding: 3px 18px 3px 0; border-bottom: 1px solid var(--grid);
+  font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { #pc { height: 160px; } }
