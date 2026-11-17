@@ -18,7 +18,9 @@
 //   view     default view: world | tmerc | ortho | longlat | spilhaus | faces
 //   rotate   initial [lambda, phi]: the globe centres on (-lambda, -phi),
 //            the flat views and tmerc use -lambda as central meridian
-//   tmerc    { lat, radius }: the spherical cap the tmerc view frames
+//   tmerc    { frame, radius, lon0 }: the tmerc view's frame, "south" |
+//            "north" | "both" polar caps of that radius; lon0 pins its
+//            central meridian (else it shares the others', -rotate[0])
 (function () {
 const SITE = window.TREND_SITE, RECS = window.TREND_RECORDS;
 const HOME = SITE.record, XC = SITE.explorer || {};
@@ -273,14 +275,27 @@ function build(D, meta, monthly, aux, wm) {
   // central meridian runs through both poles, so a polar cap sits near
   // the line of true scale and the projection is conformal: the
   // Southern Ocean view of seaice.map, with the pole near the middle.
-  // Framed on a spherical cap (explorer.tmerc), panned freely; the
+  // Framed (explorer.tmerc.frame) on a spherical cap round one pole,
+  // "south" (the default) or "north", or on both: the two poles lie on
+  // the central meridian, so ONE transverse Mercator holds both caps,
+  // joined along lon_0 and its antimeridian. Panned freely; the
   // offset is kept in projection units (tmo), so zoom about the centre
   // leaves it unchanged and a resize keeps the view. d3 clips the
   // transverse aspect's two singular points (the equator 90 degrees
   // either side of the central meridian) itself.
   const TM = XC.tmerc || {};
-  const tmCap = d3.geoCircle().center([0, TM.lat ?? -90]).radius(TM.radius ?? 50)();
-  const tmProj = d3.geoTransverseMercator().rotate([UI.rotate[0], 0])
+  const tmFrame = TM.frame || ((TM.lat ?? -90) > 0 ? "north" : "south");
+  const tmPole = lat => d3.geoCircle().center([0, lat]).radius(TM.radius ?? 50)().coordinates;
+  const tmCap = tmFrame === "both"
+    ? { type: "MultiPolygon", coordinates: [tmPole(-90), tmPole(90)] }
+    : { type: "Polygon", coordinates: tmPole(tmFrame === "north" ? 90 : -90) };
+  // tmerc.lon0 pins this view's central meridian (its own, turned by
+  // shift-drag), so e.g. a Pacific-centred world view can sit beside a
+  // transverse Mercator on 115E; unset, it shares the other views'
+  const tmOwn = TM.lon0 != null;
+  if (tmOwn && UI.tmRot == null) UI.tmRot = -TM.lon0;
+  const tmRot = () => tmOwn ? UI.tmRot : UI.rotate[0];
+  const tmProj = d3.geoTransverseMercator().rotate([tmRot(), 0])
     .fitExtent([[8, 8], [size - 8, size - 8]], tmCap)
     .precision(.7).clipExtent([[0, 0], [size, size]]);
   const tmBase = tmProj.scale();
@@ -356,6 +371,14 @@ function build(D, meta, monthly, aux, wm) {
       ...CODE.source
     ].map(l => cc + l).join("\n");
     const [va, vb] = (D.combo && D.combo.vars) || ["a", "b"];
+    // srcs: per source, the stores (sums/<store>/) it reads; more than
+    // one when a source spans stores (one per hemisphere), unioned
+    const multi = srcs.some(x => x.length > 1);
+    const rq = x => x.length > 1 ? `c(${x.map(y => `"${y}"`).join(", ")})` : `"${x[0]}"`;
+    const pq = x => x.length > 1 ? `[${x.map(y => `"${y}"`).join(", ")}]` : `"${x[0]}"`;
+    const sqlFrom = x => x.length > 1
+      ? `[${x.map(y => `'s3://${BK}/sums/${y}/*.parquet'`).join(", ")}]`
+      : `'s3://${BK}/sums/${x[0]}/*.parquet'`;
     const since = new Date(Date.now() - 3 * 31557600000)
       .toISOString().slice(0, 10);
     if (lang === "r") {
@@ -367,7 +390,11 @@ function build(D, meta, monthly, aux, wm) {
         `## widen or remove for the full record (slower, see note above)\n` +
         `since <- as.Date("${since}")\n\n` +
         `read_region <- function(src) {\n` +
-        `  open_dataset(ts$path(paste0("sums/", src))) |>\n` +
+        (multi
+          ? `  ## one dataset per store (sums/<store>/), unioned: their cells are disjoint\n` +
+            `  ds <- lapply(src, function(s) open_dataset(ts$path(paste0("sums/", s))))\n` +
+            `  (if (length(ds) == 1) ds[[1]] else open_dataset(ds)) |>\n`
+          : `  open_dataset(ts$path(paste0("sums/", src))) |>\n`) +
         `    filter(cell %in% cells, date >= since) |>\n` +
         `    group_by(date) |>\n` +
         `    summarise(n = sum(n), sumw = sum(sumw),\n` +
@@ -376,15 +403,15 @@ function build(D, meta, monthly, aux, wm) {
         `    mutate(mean = sumwx / sumw,\n` +
         `           var = pmax(0, sumwx2 / sumw - mean^2))\n}\n`;
       s += srcs.length === 2
-        ? `${va} <- read_region("${srcs[0]}")\n${vb} <- read_region("${srcs[1]}")\n` +
+        ? `${va} <- read_region(${rq(srcs[0])})\n${vb} <- read_region(${rq(srcs[1])})\n` +
           `d <- inner_join(${va}[c("date", "mean")], ${vb}[c("date", "mean")],\n` +
           `                by = "date", suffix = c("_${va}", "_${vb}")) |>\n` +
           `  mutate(diff = mean_${va} - mean_${vb})\n`
-        : `d <- read_region("${srcs[0]}")\n`;
+        : `d <- read_region(${rq(srcs[0])})\n`;
       s += `\n## Seasonal slices are FILE-LIST pruning here: the layout\n` +
         `## partitions by date in the filename, so e.g. every December\n` +
         `## across the whole record reads no off-month bytes at all:\n` +
-        `# dec <- grep("-12-", ts$ls("sums/${srcs[0]}"), value = TRUE)\n` +
+        `# dec <- grep("-12-", ts$ls("sums/${srcs[0][0]}"), value = TRUE)\n` +
         `# d12 <- open_dataset(dec, filesystem = ts) |>\n` +
         `#   filter(cell %in% cells) |> group_by(date) |>\n` +
         `#   summarise(sumw = sum(sumw), sumwx = sum(sumwx)) |>\n` +
@@ -396,16 +423,16 @@ function build(D, meta, monthly, aux, wm) {
         `SET s3_endpoint='${EP}';\n` +
         `SET s3_url_style='path'; SET s3_region='';\n\n` +
         `SELECT date, SUM(sumwx) / SUM(sumw) AS ${VAL}\n` +
-        `FROM read_parquet('s3://${BK}/sums/${srcs[0]}/*.parquet')\n` +
+        `FROM read_parquet(${sqlFrom(srcs[0])})\n` +
         `WHERE date >= DATE '${since}'  -- remove for the full record\n` +
         `  AND cell IN (\n${idLines(ids, "'", "  ")})\n` +
         `GROUP BY date ORDER BY date;\n` +
         (srcs.length === 2
-          ? `-- repeat with sums/${srcs[1]} and join on date for the difference\n`
+          ? `-- repeat with sums/${srcs[1].join(" + sums/")} and join on date for the difference\n`
           : "") +
         `\n-- seasonal slice: the date is the FILENAME, so a glob prunes\n` +
         `-- files before any bytes are read (every December, all years):\n` +
-        `--   FROM read_parquet('s3://${BK}/sums/${srcs[0]}/????-12-*.parquet')\n`;
+        `--   FROM read_parquet('s3://${BK}/sums/${srcs[0][0]}/????-12-*.parquet')\n`;
     }
     const q3 = '"' + '"' + '"';
     return `# ${hdr}\n${note}\nimport duckdb\n\ncells = [\n${idLines(ids, '"', "    ")}]\n` +
@@ -414,19 +441,25 @@ function build(D, meta, monthly, aux, wm) {
       `con.sql("SET s3_endpoint='${EP}'; SET s3_url_style='path'; SET s3_region=''")\n\n` +
       `def read_region(src):\n` +
       `    ids = ", ".join("'" + c + "'" for c in cells)\n` +
+      (multi
+        ? `    # one glob per store (sums/<store>/), read as one table\n` +
+          `    paths = ", ".join(f"'s3://${BK}/sums/{s}/*.parquet'" for s in src)\n`
+        : "") +
       `    return con.sql(f${q3}\n` +
       `        SELECT date, SUM(sumwx) / SUM(sumw) AS ${VAL}\n` +
-      `        FROM read_parquet('s3://${BK}/sums/{src}/*.parquet')\n` +
+      (multi
+        ? `        FROM read_parquet([{paths}])\n`
+        : `        FROM read_parquet('s3://${BK}/sums/{src}/*.parquet')\n`) +
       `        WHERE date >= DATE '${since}'  -- remove for the full record\n` +
       `          AND cell IN ({ids}) GROUP BY date ORDER BY date${q3}).df()\n\n` +
       (srcs.length === 2
-        ? `${va} = read_region("${srcs[0]}")\n${vb} = read_region("${srcs[1]}")\n` +
+        ? `${va} = read_region(${pq(srcs[0])})\n${vb} = read_region(${pq(srcs[1])})\n` +
           `d = ${va}.merge(${vb}, on="date", suffixes=("_${va}", "_${vb}"))\n` +
           `d["diff"] = d.${VAL}_${va} - d.${VAL}_${vb}\n`
-        : `d = read_region("${srcs[0]}")\n`) +
+        : `d = read_region(${pq(srcs[0])})\n`) +
       `\n# seasonal slice: the date is the FILENAME, so a glob prunes files\n` +
       `# before any bytes are read (every December, all years):\n` +
-      `#   read_parquet('s3://${BK}/sums/${srcs[0]}/????-12-*.parquet')\n`;
+      `#   read_parquet('s3://${BK}/sums/${srcs[0][0]}/????-12-*.parquet')\n`;
   }
   function renderCode() {
     const wrap = $("#codewrap");
@@ -435,7 +468,16 @@ function build(D, meta, monthly, aux, wm) {
     for (const x of $("#cseg").children)
       x.classList.toggle("on", x.dataset.l === UI.codeLang);
     const ids = [...sel].map(i => cells[i].id).sort();
-    const srcs = isCombo ? [D.combo.a, D.combo.b] : [D.id];
+    // a source may span stores by hemisphere (records.js sources[k].stores,
+    // store -> "s" | "n"): the code reads only those holding the selection
+    const hemis = new Set([...sel].map(i => cells[i].lat < 0 ? "s" : "n"));
+    const storesOf = k => {
+      const st = REC.sources[k]?.stores;
+      if (!st) return [k];
+      const x = Object.keys(st).filter(y => hemis.has(st[y]));
+      return x.length ? x : Object.keys(st);
+    };
+    const srcs = (isCombo ? [D.combo.a, D.combo.b] : [D.id]).map(storesOf);
     $("#codebox").textContent = genCode(UI.codeLang, ids, srcs, selLabel);
     $("#codemeta").textContent = "";
   }
@@ -733,7 +775,7 @@ function build(D, meta, monthly, aux, wm) {
          if (ev.shiftKey) {
            // turn: the central meridian; about the pole, ~180 degrees per view width
            tmProj.rotate([drag[2][0] + dx * 180 / size, 0]);
-           UI.rotate[0] = tmProj.rotate()[0];
+           if (tmOwn) UI.tmRot = tmProj.rotate()[0]; else UI.rotate[0] = tmProj.rotate()[0];
          } else {
            const s = tmProj.scale();
            UI.tmo = [drag[2][1] + dx / s, drag[2][2] + dy / s];
@@ -791,10 +833,11 @@ function build(D, meta, monthly, aux, wm) {
     view = UI.view = e.target.value;
     pan.x = 0; pan.y = 0; pan.k = 1;
     // every view shares the central meridian: the view follows you
+    // (tmerc unless its own is pinned, tmerc.lon0)
     proj.rotate(UI.rotate);
     llProj.rotate([UI.rotate[0], 0]);
     eeProj.rotate([UI.rotate[0], 0]);
-    tmProj.rotate([UI.rotate[0], 0]);
+    tmProj.rotate([tmRot(), 0]);
     render(); drawRamp();
   });
   $("#metric").addEventListener("change", e => {

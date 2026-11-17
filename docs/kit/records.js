@@ -107,18 +107,21 @@ window.TREND_RECORDS = {
     // mean daily ocean area (km2), sum(w * mean) is sea ice area
     total: { label: "Area", unit: "million km2", digits: 2, scale: 1e-8 },
     sources: {
-      "cdr-sic": { label: "CDR", long: "NSIDC CDR (25 km, 1978-)", col: "--series-1" },
-      "asi-sic": { label: "ASI", long: "Bremen ASI AMSR2 (3.125 km, 2012-)", col: "--series-2" }
+      // the CDR is one bipolar source from two stores (sums/<store>/),
+      // one per hemisphere, whose cells are disjoint
+      "cdr-sic": { label: "CDR", long: "NSIDC CDR (25 km, 1978-, both poles)", col: "--series-1",
+                   stores: { "cdr-sic": "s", "cdr-sic-north": "n" } },
+      "asi-sic": { label: "ASI", long: "Bremen ASI AMSR2 (3.125 km, 2012-, south)", col: "--series-2" }
     },
     code: {
       hdr: "sums are sea ice concentration as a fraction, weights are pixel areas (km2)",
       store: ["object storage. Values are concentration as a FRACTION (the site",
               "shows percent); SUM(sumwx) is sea ice area in km2. The full",
-              "record is ~17,500 files (CDR), so"],
+              "record is ~17,500 files per CDR hemisphere, so"],
       source: ["The source files are read through published indexes:",
                "  https://data.source.coop/ausantarctic/ausantarctic-scratch/seaice/"]
     },
-    status: { fresh: [30, 60], ghost: "cdr-sic", region: "so", unit: "M km2", digits: 2,
+    status: { fresh: [30, 60], ghost: "cdr-sic", region: "global", unit: "M km2", digits: 2,
       meta: "daily fields, refreshed weekly",
       note: "Sea ice area (million km2): concentration times pixel area, summed straight from the sums." }
   }
