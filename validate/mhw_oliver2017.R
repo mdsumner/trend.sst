@@ -17,8 +17,9 @@
 ## and differs from 2016-01-01, so "V2" below is v2.1 to 2015 plus V2's own
 ## 2016-01-01..2016-07-05, Oliver's record end.
 ##
-## Compared: boxes SEAus (Oliver), tasman (trend.sst's 147-157E 37-45S) and
-## kajtar; baselines 1982-2005, 1982-2011 (ours), 1983-2012; tiers "pixels"
+## Compared: boxes SEAus (Oliver), tasman45 (147-157E 37-45S, trend.sst's
+## tasman box until 2026-11-18) and kajtar (trend.sst's tasman box since);
+## baselines 1982-2005, 1982-2011 (ours), 1983-2012; tiers "pixels"
 ## (cos-latitude weighted mean of the 0.25 deg ocean pixels with centres in
 ## the box) and "S2 cells" (level-5 cells with centres in the box, from
 ## sums/oisst, as validate/mhw_event.R and the site do).
@@ -37,8 +38,10 @@
 ##   The box's southern edge decides the duration: pixel boxes to 45S give
 ##     249-253 d ending mid-May, to 46S 318 d ending 2016-07-22. The S2
 ##     cells with centres in any of the three boxes reach 46.0S or beyond,
-##     so the S2 tier gives 318-319 d for all of them: our OISST matches
-##     Kajtar's event because of the cell footprint, not the box.
+##     so the S2 tier gives 318-319 d for all of them: the site's OISST
+##     matched Kajtar's event because of the cell footprint, not the box.
+##     So trend.sst's tasman box now ends at 46S, Kajtar's, where the pixel
+##     and S2 tiers agree (318 and 318-319 d).
 ##
 ## Rscript validate/mhw_oliver2017.R   (from the package root; the S2 tier
 ## needs sums/oisst). Windows are cached in cache/mhw/oliver2017/; the first
@@ -111,9 +114,9 @@ v2m[match(v2$date[i16], v21$date), ] <- v2$sst100[i16, ]
 keep_v2 <- v21$date <= as.Date("2016-07-05")
 
 boxes <- list(
-  SEAus  = c(xmin = 147, xmax = 155, ymin = -45, ymax = -37),
-  tasman = c(xmin = 147, xmax = 157, ymin = -45, ymax = -37),
-  kajtar = c(xmin = 147, xmax = 157, ymin = -46, ymax = -37))
+  SEAus    = c(xmin = 147, xmax = 155, ymin = -45, ymax = -37),
+  tasman45 = c(xmin = 147, xmax = 157, ymin = -45, ymax = -37),
+  kajtar   = c(xmin = 147, xmax = 157, ymin = -46, ymax = -37))
 baselines <- list(
   "1982-2005" = c("1982-01-01", "2005-12-31"),
   "1982-2011" = c("1982-01-01", "2011-12-31"),

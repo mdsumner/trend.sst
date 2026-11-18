@@ -7,8 +7,8 @@
 ## has its origin at (-179.995, 89.995), so pixel centres sit on whole
 ## hundredths: col j (0-based) centre = -179.99 + 0.01 j,
 ##                row i (0-based) centre =   89.99 - 0.01 i.
-## e.g. tasman: xoff 32699, yoff 12699, 1000 x 800 -> centres lon
-## 147.00..156.99, lat -37.00..-44.99.
+## e.g. tasman: xoff 32699, yoff 12699, 1000 x 900 -> centres lon
+## 147.00..156.99, lat -37.00..-45.99.
 ##
 ## Known-bad dates are NOT masked here: the store is raw, flagging happens
 ## at analysis time (same rule as the sums).
