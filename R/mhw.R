@@ -113,7 +113,7 @@ mhw_detect <- function(x, dates, clim) {
 #' dates for the time-series panel.
 mhw_regions <- list(
   tasman = list(
-    title = "Tasman Sea", lon0 = 147, lat0 = -37, nx = 1000L, ny = 800L,
+    title = "Tasman Sea", lon0 = 147, lat0 = -37, nx = 1000L, ny = 900L,
     windows = list(
       ev1516 = list(label = "2015/16", stats = c("2015-08-01", "2016-06-30"),
                     plot = c("2015-08-01", "2016-07-31"), map_label = "Aug 2015–Jun 2016"),
