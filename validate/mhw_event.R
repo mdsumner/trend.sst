@@ -8,7 +8,11 @@
 ## see mhw_oliver2017.R);
 ## wa 2010/11 (Pearce & Feng 2013, J Mar Sys 111-112:139-156, over
 ## 22-33S, 110E to the coast; Kajtar et al. 2021 use 110-116E 22-32.5S;
-## ours is 110-116E 21-33S).
+## ours is 110-116E 21-33S); nw 2024/25 (Hobday et al. 2026, Oceanography
+## 39(1), doi:10.5670/oceanog.2026.e105: moderate in the north-west from
+## August 2024, strong by mid-September, severe by February 2025; no
+## published box: ours, 113-128E 11-22S, spans the Coral Reef Watch
+## Pilbara, Rowley Shoals, Scott-Ashmore and Kimberley stations).
 ##
 ## Climatology: MUR-only baseline 2003-01-01..2025-12-31 (23 whole years;
 ## MUR starts 2002-06, so the 30-year convention is not available and we

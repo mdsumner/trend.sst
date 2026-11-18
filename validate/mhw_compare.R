@@ -155,8 +155,12 @@ plot_window <- function(x0, x1, map_key, title, map_title, file, tick_by) {
   ## interior ticks from the region (tasman: 148..156E, 44..38S)
   xt <- pretty(range(maps$lon)); xt <- xt[xt > min(maps$lon) & xt < max(maps$lon)]
   yt <- pretty(range(maps$lat)); yt <- yt[yt > min(maps$lat) & yt < max(maps$lat)]
-  axis(1, at = xt, labels = paste0(xt, "°E"), lwd = 0, lwd.ticks = 0.8)
-  axis(2, at = yt, labels = paste0(abs(yt), "°S"), lwd = 0, lwd.ticks = 0.8)
+  ## pinned to the map's edges: a wide box leaves the plot region taller
+  ## than the map, and an unpinned axis would sit at the region's bottom
+  axis(1, at = xt, labels = paste0(xt, "°E"), lwd = 0, lwd.ticks = 0.8,
+       pos = min(maps$lat) - 0.005)
+  axis(2, at = yt, labels = paste0(abs(yt), "°S"), lwd = 0, lwd.ticks = 0.8,
+       pos = min(maps$lon) - 0.005)
   mtext(map_title, side = 3, line = 2.1, adj = 0, col = ink, font = 2, cex = 0.95)
   mtext(sprintf("median %d days; land grey; scale shared across figures",
                 round(median(z, na.rm = TRUE))),

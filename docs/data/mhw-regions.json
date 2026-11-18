@@ -7,9 +7,17 @@
       "ev2026"
     ]
   },
+  "nw": {
+    "title": "North-west Australia",
+    "last": "2026-11-16",
+    "windows": ["ev2425", "ev2026"]
+  },
   "wa": {
     "title": "Western Australia",
     "last": "2026-11-16",
-    "windows": ["ev1011", "ev2026"]
+    "windows": [
+      "ev1011",
+      "ev2026"
+    ]
   }
 }
