@@ -39,7 +39,10 @@
   .legend { gap: 14px; }
   .legend .sw { width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
   .mapbox { position: relative; }
-  #map { width: 100%; image-rendering: auto; border-radius: 4px; cursor: crosshair; }
+  /* full column width, but never taller than 75vh (a tall narrow box
+     shrinks instead; aspect-ratio is set per region in drawMap) */
+  #map { display: block; width: auto; max-width: 100%; max-height: 75vh;
+         image-rendering: auto; border-radius: 4px; cursor: crosshair; }
   .cbar { display: flex; align-items: center; gap: 8px; margin-top: 8px;
           font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .cbar .ramp { flex: 1; height: 10px; border-radius: 3px; }
@@ -446,10 +449,10 @@ const BASELINE_EG = {
   tasman: `in the Tasman Sea, OISST on 1982&ndash;2011 sees 2015/16 as one
     319-day event, while on 2003&ndash;2025 MUR splits it into 5 and OISST
     into 10.`,
-  wa: `off Western Australia, OISST on 1982&ndash;2011 sees 2010/11 as two
-    long events (108 days from October, 99 days from February), while on
-    2003&ndash;2025 OISST splits the same period into 6 and MUR into 5, and
-    the February event shortens to 60 days in OISST.`
+  wa: `off Western Australia, OISST on 1982&ndash;2011 sees 2010/11 as one
+    175-day event (October to April), while on 2003&ndash;2025 OISST splits
+    the same period into 6 and MUR into 4, the longest OISST piece lasting
+    41 days from February.`
 };
 
 function drawCards() {
