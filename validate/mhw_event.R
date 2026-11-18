@@ -6,7 +6,9 @@
 ## 318 d, which OISST pixels reproduce exactly; Oliver et al. 2017, Nat
 ## Commun 8:16101, over 147-155E 37-45S: 2015-09-09..2016-05-16, 251 d;
 ## see mhw_oliver2017.R);
-## wa 2010/11 (Pearce & Feng 2013, J Mar Sys 111-112:139-156).
+## wa 2010/11 (Pearce & Feng 2013, J Mar Sys 111-112:139-156, over
+## 22-33S, 110E to the coast; Kajtar et al. 2021 use 110-116E 22-32.5S;
+## ours is 110-116E 21-33S).
 ##
 ## Climatology: MUR-only baseline 2003-01-01..2025-12-31 (23 whole years;
 ## MUR starts 2002-06, so the 30-year convention is not available and we

@@ -152,8 +152,11 @@ plot_window <- function(x0, x1, map_key, title, map_title, file, tick_by) {
        max(maps$lat) + 0.005, col = land, border = NA)
   image(maps$lon, rev(maps$lat), z[, ncol(z):1], breaks = brks, col = seq_ramp(14),
         add = TRUE, useRaster = TRUE)
-  axis(1, at = seq(148, 156, 2), labels = paste0(seq(148, 156, 2), "°E"), lwd = 0, lwd.ticks = 0.8)
-  axis(2, at = seq(-44, -38, 2), labels = paste0(abs(seq(-44, -38, 2)), "°S"), lwd = 0, lwd.ticks = 0.8)
+  ## interior ticks from the region (tasman: 148..156E, 44..38S)
+  xt <- pretty(range(maps$lon)); xt <- xt[xt > min(maps$lon) & xt < max(maps$lon)]
+  yt <- pretty(range(maps$lat)); yt <- yt[yt > min(maps$lat) & yt < max(maps$lat)]
+  axis(1, at = xt, labels = paste0(xt, "°E"), lwd = 0, lwd.ticks = 0.8)
+  axis(2, at = yt, labels = paste0(abs(yt), "°S"), lwd = 0, lwd.ticks = 0.8)
   mtext(map_title, side = 3, line = 2.1, adj = 0, col = ink, font = 2, cex = 0.95)
   mtext(sprintf("median %d days; land grey; scale shared across figures",
                 round(median(z, na.rm = TRUE))),
