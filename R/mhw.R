@@ -119,6 +119,13 @@ mhw_regions <- list(
                     plot = c("2015-08-01", "2016-07-31"), map_label = "Aug 2015–Jun 2016"),
       ev2026 = list(label = "2026", stats = c("2026-01-01", "2026-12-31"),
                     plot = c("2026-01-01", "2026-12-31"), map_label = NULL))),
+  nw = list(
+    title = "North-west Australia", lon0 = 113, lat0 = -11, nx = 1500L, ny = 1100L,
+    windows = list(
+      ev2425 = list(label = "2024/25", stats = c("2024-08-01", "2025-05-31"),
+                    plot = c("2024-07-01", "2025-06-30"), map_label = "Aug 2024–May 2025"),
+      ev2026 = list(label = "2026", stats = c("2026-01-01", "2026-12-31"),
+                    plot = c("2026-01-01", "2026-12-31"), map_label = NULL))),
   wa = list(
     title = "Western Australia", lon0 = 110, lat0 = -21, nx = 600L, ny = 1200L,
     windows = list(
