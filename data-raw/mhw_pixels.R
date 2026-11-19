@@ -1,7 +1,8 @@
 ## Marine heatwaves, step 5: per-pixel Hobday MHWs on MUR for a region,
 ## baseline 2003-01-01..2025-12-31 (MUR-only, per the never-pool rule;
 ## OISST 1982-2011 is the paired classic reference, not mixed in).
-## R/mhw.R is heatwaveR-exact (validate/mhw_parity.R).
+## R/mhw.R runs spells' heatwaveR 0.5.5 parity mode, heatwaveR-exact
+## (validate/mhw_parity.R).
 ##
 ## Outputs (cache/mhw/<region>/):
 ##   pixel_daily.csv  per date, additive over pixels (cos-lat weights):
