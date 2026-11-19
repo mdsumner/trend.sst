@@ -233,9 +233,14 @@ climatology, threshold and events. The
 <a href="heatwaves.html">Heatwaves</a> page shows these.</p>
 </div>
 
-<p>The per-pixel engine is a vectorised reimplementation of the
-<a href="https://robwschlegel.github.io/heatwaveR/">heatwaveR</a>
-defaults (Schlegel &amp; Smit 2018). The day-of-year window indices are
+<p>The per-pixel engine is
+<a href="https://github.com/hypertidy/spells">spells</a>, run as
+<code>hobday2018(parity = "heatwaveR-0.5.5")</code>: a vectorised
+reimplementation of the
+<a href="https://robwschlegel.github.io/heatwaveR/">heatwaveR</a> 0.5.5
+defaults (Schlegel &amp; Smit 2018), with categories as the floor of the
+multiple of the threshold's distance from the climatology and event
+days below 1&times; counted as I. The day-of-year window indices are
 the same for every pixel, so a 50&times;50-pixel chunk shares them and
 the climatology becomes matrix column operations. It is checked against
 heatwaveR itself: on each region's box mean and 40 random pixels the

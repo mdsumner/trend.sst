@@ -1,4 +1,5 @@
-## Parity: R/mhw.R (vectorised) vs heatwaveR ts2clm() + detect_event() on
+## Parity: R/mhw.R (spells' heatwaveR 0.5.5 parity mode, vectorised) vs
+## heatwaveR ts2clm() + detect_event() on
 ## a region's box-mean series and random ocean pixels from sst.zarr.
 ## Pass = identical seas/thresh (after heatwaveR's 4-dp rounding) and
 ## identical event-day masks.
