@@ -1,17 +1,17 @@
 {
-  "generated": "2026-11-24T21:49:29Z",
+  "generated": "2026-11-25T21:49:56Z",
   "sources": {
     "oisst": {
       "first": "1981-09-01",
-      "last": "2026-11-18",
-      "n": 16515,
+      "last": "2026-11-24",
+      "n": 16521,
       "gaps": [],
       "provisional_days": 14
     },
     "ghrsst": {
       "first": "2002-06-01",
-      "last": "2026-11-22",
-      "n": 8941,
+      "last": "2026-11-23",
+      "n": 8942,
       "gaps": [],
       "provisional_days": 10
     }
